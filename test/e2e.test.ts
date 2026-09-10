@@ -18,6 +18,8 @@ describe('blueprint app (ssr)', () => {
     expect(html).toContain('Counter fixture')
     expect(html).toContain('Double: 6')
     expect(html).toContain('Bump')
+    // `time.now` is injected on the client surface too (ADR 0007); SSR renders with the server's instant.
+    expect(html).toContain(`Year: ${new Date().getUTCFullYear()}`)
   })
 
   it('resolves page routes inside the app prefix', async () => {
@@ -36,7 +38,7 @@ describe('blueprint app (ssr)', () => {
       body: { data: { count: 1 } },
     })
     expect(record.id).toBeTruthy()
-    expect(record.createdUnder.version).toMatch(/^[0-9a-f]{16}$/)
+    expect(record.createdUnder.version).toMatch(/^sha256:[0-9a-f]{64}$/)
     const fetched = await $fetch<{ id: string }>(`/api/blueprint/counter/records/${record.id}`)
     expect(fetched.id).toBe(record.id)
     await expect($fetch('/api/blueprint/counter/records', {
@@ -48,7 +50,10 @@ describe('blueprint app (ssr)', () => {
 
 describe('endpoints written in a document (nitro)', () => {
   it('publishes the runtime contract, both halves', async () => {
-    const contract = await $fetch<RuntimeContract>('/api/blueprint/contract')
+    // The default answer is the runtime manifest (ADR 0009); the two-halves view is `?format=contract`.
+    const manifest = await $fetch<{ provides: Array<{ name: string }> }>('/api/blueprint/contract')
+    expect(manifest.provides.map(provided => provided.name)).toEqual(expect.arrayContaining(['web.pages', 'time.now', 'storage.collections']))
+    const contract = await $fetch<RuntimeContract>('/api/blueprint/contract?format=contract')
     expect(contract.runtime).toBe('blueprint-nuxt-module')
     // server half
     expect(contract.server.storages.map(storage => storage.name)).toEqual(['memory', 'fs', 'sqlite'])
@@ -60,6 +65,7 @@ describe('endpoints written in a document (nitro)', () => {
     expect(contract.client.components.nuxtUi).toContain('UButton')
     expect(contract.client.state.persistence).toBe('localStorage')
     expect(contract.actions.client).toContain('navigate')
+    expect(contract.client.context).toContain('now')
     const schema = await $fetch<{ $defs: Record<string, { enum?: string[] }> }>('/api/blueprint/contract?format=schema')
     expect(Object.keys(schema.$defs)).toEqual(expect.arrayContaining(['endpoints', 'component', 'nodeType']))
     expect(schema.$defs.component!.enum).toContain('UButton')
@@ -74,7 +80,7 @@ describe('endpoints written in a document (nitro)', () => {
     const text = `note ${Date.now()}`
     const created = await $fetch<{ id: string, text: string, under: string, createdAt: string }>('/api/blueprint/board/notes', { method: 'POST', body: { text: `  ${text} ` } })
     expect(created).toMatchObject({ text })
-    expect(created.under).toMatch(/^[0-9a-f]{16}$/)
+    expect(created.under).toMatch(/^sha256:[0-9a-f]{64}$/)
 
     const listed = await $fetch<{ items: Array<{ id: string }>, total: number }>('/api/blueprint/board/notes?limit=3')
     expect(listed.total).toBe(before.total + 1)

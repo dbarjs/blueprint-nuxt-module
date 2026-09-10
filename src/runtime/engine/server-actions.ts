@@ -42,10 +42,6 @@ export function createServerActions(options: ServerActionOptions): Record<string
     return collection
   }
 
-  const remember = (helpers: ExtensionHelpers, as: string | undefined, value: unknown) => {
-    if (as) helpers.vars[as] = value
-  }
-
   /** Records matching `id` (one) or `where` (many), in stored order. */
   const select = async (collection: string, action: { id?: Logic, where?: Logic }, helpers: ExtensionHelpers): Promise<StoredRecord[]> => {
     if (action.id !== undefined) {
@@ -63,12 +59,11 @@ export function createServerActions(options: ServerActionOptions): Record<string
     if (!isPlainObject(data)) throw new BlueprintError('INVALID_RECORD', `insert into "${action.collection}": data must be an object`)
     if (collection.schema) {
       const issues = validateRecord(collection.schema, data, document, helpers)
-      if (issues.length) return { ok: false, done: true, issues, response: { status: 422, body: { statusCode: 422, message: `Record rejected by schema "${collection.schema}"`, issues } } }
+      if (issues.length) return rejected(collection.schema, issues)
     }
     const record: StoredRecord = { ...deepClone(data) as Record<string, unknown>, id: createId(), createdAt: now() }
     await store.put(action.collection, record)
-    remember(helpers, action.as, record)
-    return { ok: true }
+    return { ok: true, value: record, input: { data } }
   }
 
   const find: Extension<'find'> = async (action, helpers) => {
@@ -78,28 +73,26 @@ export function createServerActions(options: ServerActionOptions): Record<string
     const offset = action.offset === undefined ? 0 : Math.max(0, Number(helpers.evaluate(action.offset)) || 0)
     const limit = action.limit === undefined ? undefined : Math.max(0, Number(helpers.evaluate(action.limit)) || 0)
     records = records.slice(offset, limit === undefined ? undefined : offset + limit)
-    remember(helpers, action.as, records)
-    return { ok: true }
+    return { ok: true, value: records }
   }
 
   const findOne: Extension<'findOne'> = async (action, helpers) => {
     collectionOf(action.collection)
     const [record] = await select(action.collection, action, helpers)
-    remember(helpers, action.as, record ?? null)
-    return { ok: true }
+    return { ok: true, value: record ?? null }
   }
 
   const count: Extension<'count'> = async (action, helpers) => {
     collectionOf(action.collection)
     const records = await select(action.collection, action, helpers)
-    remember(helpers, action.as, records.length)
-    return { ok: true }
+    return { ok: true, value: records.length }
   }
 
   const patch: Extension<'patch'> = async (action, helpers) => {
     const collection = collectionOf(action.collection)
     const records = await select(action.collection, action, helpers)
     const updated: StoredRecord[] = []
+    const ids = records.map(record => record.id)
     for (const [index, record] of records.entries()) {
       const next = deepClone(record) as StoredRecord
       const itemScope = { ...helpers.scope, vars: { ...helpers.vars, '': record, 'item': record, index } }
@@ -111,34 +104,36 @@ export function createServerActions(options: ServerActionOptions): Record<string
       if (collection.schema) {
         const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...data } = next
         const issues = validateRecord(collection.schema, data, document, helpers)
-        if (issues.length) return { ok: false, done: true, issues, response: { status: 422, body: { statusCode: 422, message: `Record rejected by schema "${collection.schema}"`, issues } } }
+        if (issues.length) return rejected(collection.schema, issues)
       }
       await store.put(action.collection, next)
       updated.push(next)
     }
-    remember(helpers, action.as, updated)
-    return { ok: true }
+    return { ok: true, value: updated, input: { ids } }
   }
 
   const remove: Extension<'delete'> = async (action, helpers) => {
     collectionOf(action.collection)
     const records = await select(action.collection, action, helpers)
     for (const record of records) await store.delete(action.collection, record.id)
-    remember(helpers, action.as, records.length)
-    return { ok: true }
+    return { ok: true, value: records.length, input: { ids: records.map(record => record.id) } }
   }
 
-  const respond: Extension<'respond'> = (action, helpers) => ({
-    ok: true,
-    done: true,
-    response: { status: action.status ?? 200, body: action.body === undefined ? null : helpers.evaluate(action.body), headers: action.headers },
-  })
+  const respond: Extension<'respond'> = (action, helpers) => {
+    const response = { status: action.status ?? 200, body: action.body === undefined ? null : helpers.evaluate(action.body), headers: action.headers }
+    return { ok: true, done: true, response, input: { status: response.status, body: response.body } }
+  }
 
   const fail: Extension<'fail'> = (action, helpers) => {
     const status = action.status ?? 400
     const message = action.message === undefined ? 'Request failed' : String(helpers.evaluate(action.message))
     const issues = action.issues === undefined ? undefined : helpers.evaluate(action.issues)
-    return { ok: false, done: true, error: message, response: { status, body: { statusCode: status, message, ...(issues === undefined ? {} : { issues }) } } }
+    return { ok: false, done: true, error: { code: 'FAILED', message, status, ...(issues === undefined ? {} : { issues }) }, response: { status, body: { statusCode: status, message, ...(issues === undefined ? {} : { issues }) } }, input: { status, message } }
+  }
+
+  const rejected = (schema: string, issues: ValidationIssue[]): ActionResult => {
+    const message = `Record rejected by schema "${schema}"`
+    return { ok: false, done: true, issues, error: { code: 'INVALID_RECORD', message, status: 422, issues }, response: { status: 422, body: { statusCode: 422, message, issues } } }
   }
 
   return {

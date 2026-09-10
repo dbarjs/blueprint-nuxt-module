@@ -177,7 +177,7 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
       getContents: () => registryTemplate(components),
     })
     nuxt.options.alias['#blueprint/registry'] = registryTpl.dst
-    addTemplate({ filename: 'blueprint/manifest.json', write: true, getContents: () => manifestTemplate(components, '1.0.0', contract) })
+    addTemplate({ filename: 'blueprint/manifest.json', write: true, getContents: () => manifestTemplate(components, '1.0.0', contract, documents.filter(loaded => !loaded.parseError).map(loaded => loaded.document)) })
     addTemplate({ filename: 'blueprint/schema.json', write: true, getContents: () => documentSchemaTemplate(contract) })
     addTemplate({ filename: 'blueprint/runtime.schema.json', write: true, getContents: () => runtimeSchemaTemplate(contract) })
 
@@ -204,7 +204,7 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
       if (!options.validate) return
       let failed = false
       for (const loaded of documents) {
-        const report = reportDocument(loaded, contract.client.components, options.tests, contract)
+        const report = await reportDocument(loaded, contract.client.components, options.tests, contract)
         const lines = formatReport(report)
         if (report.ok) logger.success(lines.join('\n'))
         else {

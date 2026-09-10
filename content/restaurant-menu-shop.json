@@ -1,5 +1,6 @@
 {
   "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "spec": "0.1",
   "id": "01J9RESTAURANTMENUSHOP0001",
   "name": "restaurant-menu-shop",
   "content": {
@@ -320,13 +321,11 @@
     "definitions": {
       "settings": {
         "type": "object",
-        "visibility": "public",
         "logic": { "resource": "settings" }
       },
 
       "filteredProducts": {
         "type": "array",
-        "visibility": "public",
         "description": "Menu filtered by the selected category and the search box.",
         "logic": {
           "let": [
@@ -356,14 +355,12 @@
 
       "selectedProduct": {
         "type": "object",
-        "visibility": "public",
         "description": "Product addressed by the `/product/:id` route.",
         "logic": { "findBy": [{ "resource": "products" }, "id", { "context": "params.id" }] }
       },
 
       "selectedProductModifierGroups": {
         "type": "array",
-        "visibility": "public",
         "logic": {
           "map": [
             { "coalesce": [{ "get": [{ "def": "selectedProduct" }, "modifierGroups"] }, []] },
@@ -375,7 +372,6 @@
 
       "draftModifierSnapshot": {
         "type": "array",
-        "visibility": "private",
         "description": "Selected options per group, with labels and price deltas frozen for the cart line.",
         "logic": {
           "map": [
@@ -403,25 +399,21 @@
 
       "draftModifierDelta": {
         "type": "number",
-        "visibility": "public",
         "logic": { "sum": [{ "def": "draftModifierSnapshot" }, "priceDelta"] }
       },
 
       "draftUnitPrice": {
         "type": "number",
-        "visibility": "public",
         "logic": { "+": [{ "coalesce": [{ "get": [{ "def": "selectedProduct" }, "price"] }, 0] }, { "def": "draftModifierDelta" }] }
       },
 
       "draftTotal": {
         "type": "number",
-        "visibility": "public",
         "logic": { "*": [{ "def": "draftUnitPrice" }, { "coalesce": [{ "state": "ui.draft.quantity" }, 1] }] }
       },
 
       "draftIsValid": {
         "type": "boolean",
-        "visibility": "public",
         "description": "Every required modifier group has a selection.",
         "logic": {
           "every": [
@@ -439,7 +431,6 @@
 
       "draftMatchesExistingLine": {
         "type": "boolean",
-        "visibility": "private",
         "logic": {
           "some": [
             { "state": "cart.lines" },
@@ -457,7 +448,6 @@
 
       "cartLines": {
         "type": "array",
-        "visibility": "public",
         "description": "Cart lines joined with the live product row: unit price = product price + frozen modifier deltas.",
         "logic": {
           "map": [
@@ -491,15 +481,14 @@
         }
       },
 
-      "cartCount": { "type": "number", "visibility": "public", "logic": { "sum": [{ "state": "cart.lines" }, "quantity"] } },
-      "cartIsEmpty": { "type": "boolean", "visibility": "public", "logic": { "==": [{ "def": "cartCount" }, 0] } },
-      "subtotal": { "type": "number", "visibility": "public", "logic": { "sum": [{ "def": "cartLines" }, "total"] } },
+      "cartCount": { "type": "number", "logic": { "sum": [{ "state": "cart.lines" }, "quantity"] } },
+      "cartIsEmpty": { "type": "boolean", "logic": { "==": [{ "def": "cartCount" }, 0] } },
+      "subtotal": { "type": "number", "logic": { "sum": [{ "def": "cartLines" }, "total"] } },
 
-      "isDelivery": { "type": "boolean", "visibility": "public", "logic": { "==": [{ "state": "cart.fulfillment" }, "delivery"] } },
+      "isDelivery": { "type": "boolean", "logic": { "==": [{ "state": "cart.fulfillment" }, "delivery"] } },
 
       "promo": {
         "type": "object",
-        "visibility": "public",
         "description": "Promo row for the applied code, or null.",
         "logic": {
           "if": [
@@ -512,7 +501,6 @@
 
       "promoStatus": {
         "type": "string",
-        "visibility": "public",
         "logic": {
           "if": [
             { "isEmpty": [{ "state": "cart.promoCode" }] }, "none",
@@ -525,7 +513,6 @@
 
       "discount": {
         "type": "number",
-        "visibility": "public",
         "logic": {
           "let": [
             { "promo": { "def": "promo" }, "subtotal": { "def": "subtotal" } },
@@ -543,7 +530,6 @@
 
       "deliveryZone": {
         "type": "object",
-        "visibility": "public",
         "logic": {
           "if": [
             { "def": "isDelivery" },
@@ -555,7 +541,6 @@
 
       "deliveryFee": {
         "type": "number",
-        "visibility": "public",
         "logic": {
           "if": [
             { "!": { "def": "isDelivery" } }, 0,
@@ -569,29 +554,25 @@
 
       "tax": {
         "type": "number",
-        "visibility": "public",
         "description": "Tax on the discounted subtotal, rounded half-up to the cent.",
         "logic": { "percentOf": [{ "-": [{ "def": "subtotal" }, { "def": "discount" }] }, { "resource": ["settings", "taxRate"] }] }
       },
 
       "tipAmount": {
         "type": "number",
-        "visibility": "public",
         "logic": { "percentOf": [{ "def": "subtotal" }, { "coalesce": [{ "state": "cart.tip" }, 0] }] }
       },
 
       "total": {
         "type": "number",
-        "visibility": "public",
         "logic": { "+": [{ "-": [{ "def": "subtotal" }, { "def": "discount" }] }, { "def": "deliveryFee" }, { "def": "tax" }, { "def": "tipAmount" }] }
       },
 
-      "meetsMinimum": { "type": "boolean", "visibility": "public", "logic": { ">=": [{ "def": "subtotal" }, { "resource": ["settings", "minimumOrder"] }] } },
-      "amountToMinimum": { "type": "number", "visibility": "public", "logic": { "max": [0, { "-": [{ "resource": ["settings", "minimumOrder"] }, { "def": "subtotal" }] }] } },
+      "meetsMinimum": { "type": "boolean", "logic": { ">=": [{ "def": "subtotal" }, { "resource": ["settings", "minimumOrder"] }] } },
+      "amountToMinimum": { "type": "number", "logic": { "max": [0, { "-": [{ "resource": ["settings", "minimumOrder"] }, { "def": "subtotal" }] }] } },
 
       "estimatedMinutes": {
         "type": "number",
-        "visibility": "public",
         "description": "Longest prep time in the cart plus pickup or zone delivery time.",
         "logic": {
           "+": [
@@ -603,7 +584,6 @@
 
       "canCheckout": {
         "type": "boolean",
-        "visibility": "public",
         "logic": {
           "and": [
             { "!": { "def": "cartIsEmpty" } },
@@ -615,7 +595,6 @@
 
       "checkoutBlockers": {
         "type": "array",
-        "visibility": "public",
         "description": "Human reasons the order cannot be placed yet.",
         "logic": {
           "filter": [
@@ -631,7 +610,6 @@
 
       "orderPayload": {
         "type": "object",
-        "visibility": "public",
         "description": "Exactly what gets submitted — a snapshot with prices frozen.",
         "logic": {
           "obj": {
@@ -660,7 +638,6 @@
 
       "lastOrderMatchesRoute": {
         "type": "boolean",
-        "visibility": "public",
         "logic": { "and": [{ "!!": { "state": "lastOrder" } }, { "==": [{ "state": "lastOrder.id" }, { "context": "params.id" }] }] }
       }
     },
@@ -1847,6 +1824,22 @@
         "name": "search and category filters combine",
         "state": { "ui": { "category": "wood-fired", "search": "honey" } },
         "expect": { "filteredProducts": [{ "id": "nduja-honey", "category": "wood-fired", "name": "'Nduja & honey", "description": "Spicy Calabrian 'nduja, mozzarella, hot honey, pickled shallot.", "price": 1900, "prepMinutes": 15, "tags": ["spicy", "popular"], "icon": "i-lucide-pizza", "tone": "error", "modifierGroups": ["pizza-size", "pizza-extras"] }] }
+      },
+      {
+        "name": "placing an order clears the cart, thanks the customer and navigates",
+        "description": "Action scenario (ADR 0011): the submit is stubbed, the toast is recorded, the navigation is checked by name and params. No network, no storage.",
+        "state": {"cart": {"sequence": 1, "lines": [{"id": 1, "productId": "margherita", "quantity": 2, "modifiers": [], "notes": ""}], "fulfillment": "pickup", "promoCode": "", "tip": 10}, "checkout": {"customer": {"name": "Ada", "phone": "555-0100", "email": "ada@example.com"}, "payment": {"method": "card"}, "notes": ""}},
+        "run": "place-order",
+        "stubs": {"http.client": [{"match": {"type": "submit"}, "result": {"ok": true, "value": {"id": "ORD-1", "status": "received"}}}], "ui.toast": [{"result": {"ok": true}}], "web.router": [{"match": {"type": "navigate", "to": "page:order-confirmed"}, "result": {"ok": true}}]},
+        "after": {"state": {"cart": {"lines": []}, "lastOrder": {"id": "ORD-1"}}, "effects": [{"capability": "http.client", "type": "submit"}, {"capability": "ui.toast", "type": "toast", "title": "Order received"}, {"capability": "web.router", "type": "navigate", "to": "page:order-confirmed", "params": {"id": "ORD-1"}}], "expect": {"cartIsEmpty": true}}
+      },
+      {
+        "name": "an order refused by the kitchen keeps the cart and explains why",
+        "state": {"cart": {"sequence": 1, "lines": [{"id": 1, "productId": "margherita", "quantity": 1, "modifiers": [], "notes": ""}], "fulfillment": "pickup", "promoCode": "", "tip": 10}, "checkout": {"customer": {"name": "Ada", "phone": "555-0100", "email": "ada@example.com"}, "payment": {"method": "card"}, "notes": ""}},
+        "run": "place-order",
+        "stubs": {"http.client": [{"match": {"type": "submit"}, "result": {"ok": false, "error": {"code": "KITCHEN_CLOSED", "message": "The kitchen is closed."}}}], "ui.toast": [{"result": {"ok": true}}]},
+        "error": "KITCHEN_CLOSED",
+        "after": {"state": {"cart": {"lines": [{"productId": "margherita", "quantity": 1, "id": 1, "modifiers": [], "notes": ""}]}, "lastOrder": null}, "effects": [{"capability": "http.client", "type": "submit"}, {"capability": "ui.toast", "type": "toast", "title": "We could not place your order", "description": "KITCHEN_CLOSED"}]}
       }
     ]
   }

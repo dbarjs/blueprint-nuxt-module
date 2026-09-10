@@ -38,16 +38,32 @@ reloads the app. Invalid documents fail `nuxt build`.
 - **Materializes** the abstract tree into Vue through a generated lazy
   registry (`.nuxt/blueprint/registry.mjs`) of the base vocabulary, every Nuxt
   UI component and opt-in app components prefixed `Blueprint`.
-- **Validates at build time**: envelope, every static reference (`refs()`),
-  definition and template cycles, duplicate routes, unknown components, raw
-  html or class escape hatches (reported as non-portable) and the document's
-  own tests. It also generates `.nuxt/blueprint/schema.json` for editor
-  IntelliSense and `.nuxt/blueprint/manifest.json` for agents.
+- **Validates at build time**: envelope and `spec` version, every static
+  reference (`refs()`), definition, action and template cycles, duplicate
+  routes, unknown components, raw html or class escape hatches, the shape of
+  every test form, projections per audience (a public page may not lean on a
+  server-only table), and the document's own tests. It also generates
+  `.nuxt/blueprint/schema.json` for editor IntelliSense and
+  `.nuxt/blueprint/manifest.json` for agents.
+- **Computes compatibility**: what a document *requires* is derived from its
+  references as versioned **capabilities** (`web.pages`, `http.endpoints`,
+  `storage.collections`, `vocab.base`…) and checked against what the runtime
+  *provides*. Critical and absent → the document is refused; optional and
+  absent → it degrades and the report says so. Each document gets a **version
+  manifest** (section hashes, requirements, portability level and
+  `portable / degradable / LOCKED` status) and the runtime publishes its
+  **runtime manifest** at `GET /api/blueprint/contract`.
+- **Carries four kinds of test in the document**: definition tests
+  (state in, values out), tree tests (a template renders these nodes), action
+  scenarios (run actions against stubbed capabilities, compare state and the
+  effect log) and endpoint scenarios (request in, response out, records
+  after). No network and no storage are touched; an unstubbed effect fails
+  the test.
 - **Pins records**: `POST /api/blueprint/<app>/records` re-validates the
   payload with the same validator against the published document, refuses a
   payload built under a different document version (409) and stores the record
-  with `createdUnder: { document, version }`. The version is the FNV-1a hash of
-  the canonical document.
+  with `createdUnder: { document, version }`. The version is
+  `sha256:` of the canonical (RFC 8785) document.
 - **Persists state** per app in `localStorage`; a new document version starts
   from its initial state again. Live data fetched from endpoints is never
   persisted, and pages that fetch on `enter` are not prerendered.
@@ -55,12 +71,18 @@ reloads the app. Invalid documents fail `nuxt build`.
   (`memory`, `fs`, `sqlite`), its collections and its HTTP endpoints, and
   writes the handlers in the same action language the browser runs — with
   server effects (`insert`, `find`, `patch`, `respond`…) instead of browser
-  ones. The runtime publishes its **contract** — both halves: the components
-  templates may draw on the client side, the storage, actions and request
-  shape handlers may use on the server side — as `.nuxt/blueprint/runtime.schema.json`
-  and `GET /api/blueprint/contract`, and validates documents against it at
-  build time. `content/public-board.json` is a complete app — storage, API
-  and pages — in one file.
+  ones. Every capability call may bind its value (`as`) or write it to state
+  (`result`) on either side, failures are values a `catch` can read, and every
+  call is appended to an effect log. Components outside the base vocabulary
+  may carry a `fallback` so a runtime without them still draws something.
+  Endpoints may carry an `access` rule over `context.actor` (the `identity`
+  capability, reserved; no provider ships yet). `content/public-board.json` is a complete app — storage, API
+  and pages — in one file; `content/health-quote.json` goes further and
+  prices a health insurance quote on both sides with the same definitions
+  (rating tables as parameter tables, a handler that stages the request as
+  browser state, version-pinned quotes). `content/habit-tracker.json` goes the
+  other way: no server at all, streaks and a month grid computed from
+  `context.now` with calendar arithmetic written in the notation.
 
 ## Document shape
 

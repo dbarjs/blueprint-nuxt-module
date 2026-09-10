@@ -1,16 +1,24 @@
 /**
  * Document validation — runs at build time (fails the build) and in tests.
  *
- * Checks the envelope, section shapes, every static reference (`refs()`),
- * definition cycles, component names against the registry, and reports the
- * vocabulary layers the document uses (portability).
+ * Checks the envelope (spec version), section shapes, every static
+ * reference (`refs()`), definition and action cycles, component names
+ * against the registry, the shape of every test form, projections per
+ * audience, and computes what the document requires against what the
+ * runtime provides: critical absent → error, optional absent → warning,
+ * locked nodes → named (ADR 0006, 0007, 0009, 0011, 0015, 0026).
  */
-import { CLIENT_ACTION_TYPES, SERVER_ACTION_TYPES, type BlueprintDocument, type BlueprintTemplate } from './types'
+import { SPEC_RANGE, SPEC_VERSION, type BlueprintDocument, type BlueprintTemplate } from './types'
 import { refsOfDocument, type RefSet } from './refs'
 import { isPageTemplate, routeOf } from './template'
 import { isPlainObject } from './path'
 import { createEvaluator } from './logic'
 import { HTTP_METHODS, RUNTIME_CONTRACT, storageNames, type RuntimeContract } from './contract'
+import { CAPABILITIES, capabilityOfAction, requirementsOf, satisfies, type Requirements } from './capabilities'
+import { checkCompatibility } from './capabilities'
+import { portabilityOf, runtimeManifestOf, type Portability } from './manifest'
+import { checkProjections } from './projection'
+import { testFormOf } from './test-forms'
 
 export interface DocumentIssue {
   level: 'error' | 'warning'
@@ -39,6 +47,12 @@ export interface ValidationReport {
   pages: Array<{ name: string, route: string }>
   endpoints: Array<{ name: string, method: string, path: string }>
   refs: Record<string, RefSet>
+  /** Derived requirements (ADR 0007). */
+  requirements?: Requirements
+  /** Level and status (ADR 0009, 0026). */
+  portable?: Portability
+  /** Verdict against the runtime validated for. */
+  compatibility?: 'compatible' | 'degraded' | 'incompatible'
 }
 
 export interface ValidateDocumentOptions {
@@ -60,6 +74,13 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
   }
   if (!document.name || !/^[a-z0-9][a-z0-9-]*$/.test(document.name)) {
     error('INVALID_NAME', `document name "${String(document.name)}" must be a lowercase slug (it becomes the URL prefix)`)
+  }
+  // ---- spec version (ADR 0006): refuse outside the range, warn when absent ----
+  if (document.spec === undefined) warning('SPEC_MISSING', `document declares no "spec"; treated as "${SPEC_VERSION}" until the first tagged spec`, 'spec')
+  else if (typeof document.spec !== 'string' || !/^\d+\.\d+$/.test(document.spec)) error('UNSUPPORTED_SPEC', `"spec" must be a "major.minor" string, got ${JSON.stringify(document.spec)}`, 'spec')
+  else if (!satisfies(`${document.spec}.0`, SPEC_RANGE)) error('UNSUPPORTED_SPEC', `document is written for spec ${document.spec}; this engine implements ${SPEC_RANGE}`, 'spec')
+  if (document.projection !== undefined && (!isPlainObject(document.projection) || !Array.isArray(document.projection.select) || !document.projection.audience)) {
+    error('INVALID_DOCUMENT', '"projection" must carry "select" and "audience"', 'projection')
   }
   const content = document.content
   if (!isPlainObject(content)) {
@@ -87,6 +108,10 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
   }
   for (const [definitionName, definition] of Object.entries(content.definitions || {})) {
     if (!isPlainObject(definition) || !('logic' in definition)) error('INVALID_DEFINITION', `definition "${definitionName}" must have "logic"`, `definitions.${definitionName}`)
+    else if (definition.visibility !== undefined) warning('DEPRECATED', `definition "${definitionName}" uses "visibility", which has no semantics; "audience" decides where an entry may travel (ADR 0015)`, `definitions.${definitionName}`)
+  }
+  for (const [profileName, profile] of Object.entries(content.profiles || {})) {
+    if (!isPlainObject(profile) || !Array.isArray(profile.select) || typeof profile.audience !== 'string') error('INVALID_PROFILE', `profile "${profileName}" must have "select" (array) and "audience"`, `profiles.${profileName}`)
   }
 
   const pages: Array<{ name: string, route: string }> = []
@@ -119,6 +144,18 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     }
   }
   knownStorage(content.runtime?.storage, 'runtime.storage')
+  for (const bucket of ['requires', 'optional'] as const) {
+    const entries = content.runtime?.[bucket]
+    if (entries === undefined) continue
+    if (!isPlainObject(entries)) {
+      error('INVALID_SECTION', `"runtime.${bucket}" must map capability names to version ranges`, `runtime.${bucket}`)
+      continue
+    }
+    for (const [capabilityName, range] of Object.entries(entries)) {
+      if (typeof range !== 'string') error('INVALID_SECTION', `runtime.${bucket}.${capabilityName} must be a version range string`, `runtime.${bucket}`)
+      if (!CAPABILITIES[capabilityName] && !capabilityName.includes(':')) warning('UNKNOWN_CAPABILITY', `runtime.${bucket} names "${capabilityName}", which is not a standard capability (third-party names are URIs)`, `runtime.${bucket}`)
+    }
+  }
   for (const [collectionName, collection] of Object.entries(content.collections || {})) {
     if (!isPlainObject(collection)) {
       error('INVALID_COLLECTION', `collection "${collectionName}" must be an object`, `collections.${collectionName}`)
@@ -140,6 +177,7 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     if (typeof endpoint.path !== 'string' || !endpoint.path.startsWith('/')) error('INVALID_ENDPOINT', `endpoint "${endpointName}" path must start with "/"`, where)
     if (endpoint.handler === undefined) error('INVALID_ENDPOINT', `endpoint "${endpointName}" needs a "handler"`, where)
     if (endpoint.input !== undefined && !isPlainObject(endpoint.input)) error('INVALID_ENDPOINT', `endpoint "${endpointName}" input must be an object`, where)
+    if (endpoint.access !== undefined && (endpoint.access === null || typeof endpoint.access === 'boolean')) warning('ACCESS_CONSTANT', `endpoint "${endpointName}" has a constant access rule; omit it (open) or write a rule over context.actor`, where)
     const key = `${String(endpoint.method).toUpperCase()} ${String(endpoint.path)}`
     const existing = routesByEndpoint.get(key)
     if (existing) error('DUPLICATE_ENDPOINT', `"${key}" is declared by both "${existing}" and "${endpointName}"`, where)
@@ -178,9 +216,10 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     escapes.push(...set.escapes)
   }
 
-  // ---- action placement: server actions stay in handlers, client ones out ----
-  const serverTypes = new Set<string>(SERVER_ACTION_TYPES)
-  const clientTypes = new Set<string>(CLIENT_ACTION_TYPES)
+  // ---- action placement: a property of the capability's surface (ADR 0008) ----
+  const surfaceOf = (type: string) => capabilityOfAction(type)?.surface
+  const serverTypes = new Set<string>(contract.actions.server)
+  const clientTypes = new Set<string>(contract.actions.client)
   const contractServer = new Set<string>([...contract.actions.shared, ...contract.actions.server])
   const typesOf = (section: string, seen = new Set<string>()): Set<string> => {
     const out = new Set<string>()
@@ -196,15 +235,31 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     const types = typesOf(section)
     if (section.startsWith('endpoints.')) {
       for (const type of types) {
-        if (clientTypes.has(type)) error('CLIENT_ACTION_IN_HANDLER', `${section} runs "${type}", which only exists in the browser`, section)
+        if (surfaceOf(type) === 'client' || clientTypes.has(type)) error('CLIENT_ACTION_IN_HANDLER', `${section} runs "${type}", whose capability (${capabilityOfAction(type)?.name || 'client'}) has no server surface here`, section)
         else if (!contractServer.has(type) && !serverTypes.has(type)) error('UNKNOWN_ACTION_TYPE', `${section} runs "${type}", unknown to ${contract.runtime}`, section)
       }
       if (!types.has('respond') && !types.has('fail')) warning('NO_RESPONSE', `${section} never runs "respond"; requests will get 204`, section)
     }
     else if (section.startsWith('templates.')) {
-      for (const type of types) if (serverTypes.has(type)) error('SERVER_ACTION_IN_TEMPLATE', `${section} runs "${type}", which only exists on the server`, section)
+      for (const type of types) if (surfaceOf(type) === 'server' || serverTypes.has(type)) error('SERVER_ACTION_IN_TEMPLATE', `${section} runs "${type}", whose capability (${capabilityOfAction(type)?.name || 'server'}) has no browser surface here`, section)
     }
   }
+
+  // ---- named action cycles (ADR 0008): same algorithm as definitions -----------
+  const actionGraph = new Map<string, Set<string>>()
+  for (const actionName of Object.keys(content.actions || {})) actionGraph.set(actionName, refs[`actions.${actionName}`]?.actions || new Set())
+  const actionState = new Map<string, 'visiting' | 'done'>()
+  const visitAction = (node: string, trail: string[]) => {
+    if (actionState.get(node) === 'done') return
+    if (actionState.get(node) === 'visiting') {
+      error('ACTION_CYCLE', `actions call each other in a cycle: ${[...trail, node].join(' → ')}`, `actions.${node}`)
+      return
+    }
+    actionState.set(node, 'visiting')
+    for (const next of actionGraph.get(node) || []) if (actionGraph.has(next)) visitAction(next, [...trail, node])
+    actionState.set(node, 'done')
+  }
+  for (const actionName of actionGraph.keys()) visitAction(actionName, [])
 
   // ---- definition cycles ---------------------------------------------------
   const graph = new Map<string, Set<string>>()
@@ -251,16 +306,72 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     else portability.unknown.push(component)
   }
   if (options.registry) {
-    for (const component of portability.unknown) error('UNKNOWN_COMPONENT', `component "${component}" is not registered`, 'templates')
+    // Unknown components with a fallback are drawable through it (ADR 0026); without one they are errors.
+    const lockedNames = new Set<string>()
+    for (const set of Object.values(refs)) for (const entry of set.locked) lockedNames.add(entry.component)
+    for (const component of portability.unknown) {
+      if (lockedNames.has(component)) error('UNKNOWN_COMPONENT', `component "${component}" is not registered and has no fallback`, 'templates')
+      else warning('UNKNOWN_COMPONENT', `component "${component}" is not registered; its fallback will be drawn`, 'templates')
+    }
   }
   for (const escape of escapes) warning('NON_PORTABLE', escape)
 
-  // ---- tests: static shape only (execution lives in tests.ts) --------------
+  // ---- requirements, compatibility, portability (ADR 0007, 0009, 0026) ---------
+  const requirements = requirementsOf(document, refs, options.registry)
+  const portable = portabilityOf(document, refs, requirements)
+  for (const entry of portable.locked) warning('LOCKED', `"${entry.component}" has no fallback; the document runs only where its vocabulary exists`, entry.where)
+  const runtimeManifest = runtimeManifestOf(contract)
+  const compatibility = checkCompatibility({ spec: document.spec, requires: requirements.requires, optional: requirements.optional }, runtimeManifest)
+  for (const missing of compatibility.missing) {
+    const reason = requirements.reasons[missing.name]?.slice(0, 3).join(', ')
+    error(missing.code, `${contract.runtime} ${missing.provided ? `provides ${missing.name} ${missing.provided}, outside ${missing.required}` : `does not provide ${missing.name} ${missing.required}`}${reason ? ` (needed by ${reason})` : ''}`, 'runtime')
+  }
+  for (const unavailable of compatibility.unavailable) warning('CAPABILITY_UNAVAILABLE', `${unavailable.name} is optional and ${contract.runtime} does not provide it; the document degrades there`, 'runtime')
+
+  // ---- projections (ADR 0015): a public page may not lean on a server entry ----
+  for (const issue of checkProjections(document, refs)) error(issue.code, issue.message, issue.where)
+
+  // ---- tests: static shape of every form (execution lives in tests.ts) ---------
   const tests = content.tests || []
   tests.forEach((test, index) => {
-    if (!isPlainObject(test) || !test.name || !isPlainObject(test.expect)) error('INVALID_TEST', `test ${index} must have "name" and "expect"`, `tests.${index}`)
-    else for (const definitionName of Object.keys(test.expect)) {
-      if (!content.definitions?.[definitionName]) error('UNKNOWN_DEFINITION', `test "${test.name}" expects unknown definition "${definitionName}"`, `tests.${index}`)
+    const where = `tests.${index}`
+    if (!isPlainObject(test) || !test.name) {
+      error('INVALID_TEST', `test ${index} must have a "name"`, where)
+      return
+    }
+    const form = testFormOf(test)
+    const record = test as Record<string, unknown>
+    switch (form) {
+      case 'definition':
+        if (record.expect !== undefined && !isPlainObject(record.expect)) error('INVALID_TEST', `test "${test.name}": "expect" must map definitions to values`, where)
+        for (const definitionName of Object.keys(isPlainObject(record.expect) ? record.expect : {})) {
+          if (!content.definitions?.[definitionName]) error('UNKNOWN_DEFINITION', `test "${test.name}" expects unknown definition "${definitionName}"`, where)
+        }
+        break
+      case 'tree': {
+        const render = typeof record.render === 'string' ? record.render : isPlainObject(record.render) ? record.render.template : undefined
+        if (typeof render !== 'string') error('INVALID_TEST', `test "${test.name}": "render" must be a template name or { template }`, where)
+        else if (!content.templates[render]) error('UNKNOWN_TEMPLATE', `test "${test.name}" renders unknown template "${render}"`, where)
+        if (record.tree === undefined && record.contains === undefined) error('INVALID_TEST', `test "${test.name}": a tree test needs "tree" or "contains"`, where)
+        break
+      }
+      case 'scenario':
+        if (typeof record.run === 'string' && !content.actions?.[record.run]) error('UNKNOWN_ACTION', `test "${test.name}" runs unknown action "${record.run}"`, where)
+        if (record.stubs !== undefined && !isPlainObject(record.stubs)) error('INVALID_TEST', `test "${test.name}": "stubs" must map capabilities to stub lists`, where)
+        break
+      case 'endpoint': {
+        const request = record.request as Record<string, unknown>
+        if (!isPlainObject(request)) error('INVALID_TEST', `test "${test.name}": "request" must be an object`, where)
+        else if (typeof request.endpoint === 'string' && !content.endpoints?.[request.endpoint]) error('UNKNOWN_ENDPOINT', `test "${test.name}" requests unknown endpoint "${request.endpoint}"`, where)
+        else if (request.endpoint === undefined && (typeof request.method !== 'string' || typeof request.path !== 'string')) error('INVALID_TEST', `test "${test.name}": request needs "endpoint" or "method" + "path"`, where)
+        break
+      }
+      default:
+        error('INVALID_TEST', `test "${test.name}" carries none of expect, render, run or request`, where)
+    }
+    const after = record.after as Record<string, unknown> | undefined
+    for (const definitionName of Object.keys(isPlainObject(after) && isPlainObject(after.expect) ? after.expect : {})) {
+      if (!content.definitions?.[definitionName]) error('UNKNOWN_DEFINITION', `test "${test.name}" expects unknown definition "${definitionName}"`, where)
     }
   })
 
@@ -275,7 +386,7 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     }
   }
 
-  return { name, issues, portability, pages, endpoints, refs }
+  return { name, issues, portability, pages, endpoints, refs, requirements, portable, compatibility: compatibility.verdict }
 }
 
 function emptyPortability(): PortabilityReport {

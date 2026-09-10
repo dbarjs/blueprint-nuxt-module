@@ -158,3 +158,12 @@ export const BASE_COMPONENT_NAMES = Object.keys(BASE_VOCABULARY)
 
 /** Components implemented by the module runtime (they back base names). */
 export const RUNTIME_COMPONENT_NAMES = [...new Set(Object.values(BASE_VOCABULARY).map(entry => entry.to).filter(name => name.startsWith('Blueprint')))]
+
+/** The vocabulary capability a component name belongs to (ADR 0007): registry first, naming convention second. */
+export function vocabularyOf(component: string, registry: { base?: string[], nuxtUi?: string[], app?: string[] } = {}): 'vocab.base' | 'vocab.nuxt-ui' | 'vocab.app' {
+  if ((registry.base || BASE_COMPONENT_NAMES).includes(component)) return 'vocab.base'
+  if (registry.nuxtUi?.includes(component)) return 'vocab.nuxt-ui'
+  if (registry.app?.includes(component)) return 'vocab.app'
+  if (/^U[A-Z]/.test(component)) return 'vocab.nuxt-ui'
+  return 'vocab.app'
+}

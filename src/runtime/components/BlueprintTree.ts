@@ -32,6 +32,7 @@ export function renderNodes(nodes: AbstractNode[], runtime: BlueprintRuntime): V
 
 function renderNode(node: AbstractNode, runtime: BlueprintRuntime): VNodeChild {
   if (node.kind === 'text') return createTextVNode(node.text || '')
+  if (node.kind === 'unavailable') return unavailable(node)
 
   const props: Record<string, unknown> = { ...(node.props || {}), key: node.key }
   wireEvents(node, props, runtime)
@@ -97,6 +98,12 @@ function wireSpecialProps(node: AbstractNode, props: Record<string, unknown>, ru
       props.state = target
     }
   }
+  // The base `Progress` speaks `value`; Nuxt UI's bar reads `modelValue`.
+  // Without the mapping the bar has no value and animates as indeterminate.
+  if ((name === 'Progress' || name === 'UProgress') && props.value !== undefined && props.modelValue === undefined) {
+    props.modelValue = props.value
+    delete props.value
+  }
   // `to` is app-relative (`/cart`, `page:cart`) unless `external` is set;
   // `endpoint:<name>` links to a document endpoint (always external).
   if (typeof props.to === 'string') {
@@ -108,6 +115,14 @@ function wireSpecialProps(node: AbstractNode, props: Record<string, unknown>, ru
       props.to = runtime.href(props.to)
     }
   }
+}
+
+/** A component with no fallback on a runtime without its vocabulary: shown, never hidden (ADR 0026). */
+function unavailable(node: AbstractNode): VNode {
+  return h('div', {
+    key: node.key,
+    class: 'rounded border border-dashed border-warning p-2 text-xs text-warning',
+  }, `"${node.as}" is unavailable here (${node.capability}); the document has no fallback for it`)
 }
 
 function missing(node: AbstractNode): VNode {

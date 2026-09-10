@@ -3,8 +3,10 @@
  * the JSON Schema of the document format (for editor IntelliSense).
  */
 import { BASE_VOCABULARY } from '../runtime/engine/registry'
-import { ACTION_TYPES } from '../runtime/engine/types'
+import { ACTION_TYPES, SPEC_RANGE, SPEC_VERSION, type BlueprintDocument } from '../runtime/engine/types'
 import { componentNames, RUNTIME_CONTRACT, runtimeSchema, type RuntimeContract } from '../runtime/engine/contract'
+import { CAPABILITIES } from '../runtime/engine/capabilities'
+import { runtimeManifestOf, versionManifestOf } from '../runtime/engine/manifest'
 
 export interface RegistryLayers {
   base: string[]
@@ -57,11 +59,20 @@ export function layersOf(components: ComponentInfo[]): RegistryLayers {
   }
 }
 
-export function manifestTemplate(components: ComponentInfo[], version: string, contract: RuntimeContract = RUNTIME_CONTRACT): string {
+/**
+ * The project manifest (ADR 0009): the runtime manifest, the component
+ * contracts, and one version manifest per document the build saw.
+ */
+export function manifestTemplate(components: ComponentInfo[], version: string, contract: RuntimeContract = RUNTIME_CONTRACT, documents: BlueprintDocument[] = []): string {
   const layers = layersOf(components)
+  const runtime = runtimeManifestOf(contract)
   const manifest = {
     vocabulary: 'blueprint-nuxt-module',
     version,
+    spec: SPEC_VERSION,
+    runtime,
+    documents: documents.map(document => versionManifestOf(document, { registry: contract.client.components, provides: runtime.provides })),
+    capabilities: CAPABILITIES,
     layers: {
       base: Object.fromEntries(Object.entries(BASE_VOCABULARY).map(([name, entry]) => [name, {
         description: entry.description,
@@ -75,7 +86,7 @@ export function manifestTemplate(components: ComponentInfo[], version: string, c
     },
     nodeTypes: ['component', 'html', 'text', 'if', 'for', 'template', 'outlet'],
     actionTypes: [...ACTION_TYPES],
-    runtime: contract,
+    contract,
   }
   return JSON.stringify(manifest, null, 2)
 }
@@ -100,9 +111,11 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
     required: ['content'],
     properties: {
       $schema: { type: 'string' },
+      spec: { type: 'string', pattern: '^\\d+\\.\\d+$', description: `Kernel version the document is written in (this engine: ${SPEC_RANGE}).` },
       id: { type: 'string' },
       name: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$', description: 'URL prefix of the app; defaults to the file name.' },
       from: { type: 'object', properties: { blueprintId: { type: 'string' }, message: { type: 'string' } } },
+      projection: { type: 'object', required: ['of', 'select', 'audience'], properties: { of: { type: 'string' }, select: { type: 'array', items: { type: 'string' } }, audience: { type: 'string' }, profile: { type: 'string' } } },
       content: {
         type: 'object',
         required: ['meta', 'resources', 'schemas', 'templates'],
@@ -128,6 +141,7 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
           actions: { type: 'object', additionalProperties: actions },
           templates: { type: 'object', additionalProperties: { anyOf: [nodes, { $ref: '#/$defs/page' }] } },
           tests: { type: 'array', items: { $ref: '#/$defs/test' } },
+          profiles: { type: 'object', additionalProperties: { type: 'object', required: ['select', 'audience'], properties: { select: { type: 'array', items: { type: 'string' } }, audience: { type: 'string' }, description: { type: 'string' } } } },
           // Owned by the runtime: generated next to this file from its contract.
           runtime: { $ref: './runtime.schema.json#/$defs/runtime' },
           collections: { $ref: './runtime.schema.json#/$defs/collections' },
@@ -144,6 +158,7 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
           type: { type: 'string', examples: ['list', 'constant', 'parameter-table', 'references', 'options'] },
           name: { type: 'string' },
           description: { type: 'string' },
+          audience: { type: 'string', description: 'Where the entry may travel: public (default), client, server, print... (ADR 0015)' },
           data: {},
           hitPolicy: { type: 'string', enum: ['first', 'unique', 'collect', 'last'] },
           default: {},
@@ -154,7 +169,8 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
         required: ['logic'],
         properties: {
           type: { type: 'string', enum: ['number', 'string', 'boolean', 'array', 'object', 'any'] },
-          visibility: { type: 'string', enum: ['public', 'private'] },
+          visibility: { type: 'string', enum: ['public', 'private'], description: 'Deprecated, documentation only; use audience.' },
+          audience: { type: 'string', description: 'Where the entry may travel: public (default), client, server, print... (ADR 0015)' },
           description: { type: 'string' },
           logic,
         },
@@ -162,8 +178,25 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
       jsonSchema: { type: 'object' },
       test: {
         type: 'object',
-        required: ['name', 'expect'],
-        properties: { name: { type: 'string' }, state: { type: 'object' }, context: { type: 'object' }, expect: { type: 'object' } },
+        required: ['name'],
+        description: 'One of four forms (ADR 0011), recognised by its keys: expect (definition), render (tree), run (action scenario), request (endpoint scenario).',
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+          state: { type: 'object' },
+          context: { type: 'object' },
+          error: { type: 'string', description: 'Error code the run must end with (negative tests).' },
+          expect: { type: 'object', description: 'Definition name → expected value (exact).' },
+          render: { anyOf: [{ type: 'string' }, { type: 'object', required: ['template'], properties: { template: { type: 'string' }, with: { type: 'object', additionalProperties: logic }, params: { type: 'object' } } }] },
+          tree: { type: 'array' },
+          contains: { type: 'array', items: { type: 'object', properties: { as: { type: 'string' }, kind: { type: 'string' }, text: { type: 'string' }, props: { type: 'object' } } } },
+          run: actions,
+          stubs: { type: 'object', description: 'Capability name → stub list [{ match, result }], or for storage.collections: collection → seeded records.' },
+          request: { type: 'object', properties: { endpoint: { type: 'string' }, method: { type: 'string' }, path: { type: 'string' }, params: { type: 'object' }, query: { type: 'object' }, body: {} } },
+          response: { type: 'object', properties: { status: { type: 'integer' }, body: {} } },
+          after: { type: 'object', properties: { state: { type: 'object' }, effects: { type: 'array' }, expect: { type: 'object' }, collections: { type: 'object' } } },
+        },
+        anyOf: [{ required: ['expect'] }, { required: ['error'] }, { required: ['render'] }, { required: ['run'] }, { required: ['request'] }],
       },
       page: {
         type: 'object',
@@ -196,7 +229,7 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
           sort: { $ref: './runtime.schema.json#/$defs/serverAction/properties/sort' },
           limit: logic,
           offset: logic,
-          as: { type: 'string' },
+          as: { type: 'string', description: 'Variable receiving the value of a capability call.' },
           status: { type: 'integer' },
           headers: { type: 'object', additionalProperties: { type: 'string' } },
           message: logic,
@@ -222,7 +255,7 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
           schema: { type: 'string' },
           endpoint: { type: 'string' },
           body: logic,
-          result: { type: 'string' },
+          result: { type: 'string', description: 'State path receiving the value of a capability call.' },
           name: { type: 'string' },
           with: { type: 'object', additionalProperties: logic },
           steps: actions,
@@ -244,6 +277,7 @@ export function documentSchemaTemplate(contract: RuntimeContract): string {
           slots: { type: 'object', additionalProperties: nodes },
           model: { anyOf: [{ type: 'string' }, { type: 'object', required: ['path'], properties: { path: { type: 'string' }, prop: { type: 'string' } } }] },
           on: { type: 'object', additionalProperties: actions },
+          fallback: { ...nodes, description: 'Drawn instead of this component where its vocabulary is absent; base vocabulary only (ADR 0026).' },
           condition: logic,
           else: nodes,
           in: logic,

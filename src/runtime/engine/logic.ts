@@ -172,30 +172,43 @@ function iterate(args: unknown[], scope: EvalScope, ev: Evaluator, operator: str
 }
 
 /**
- * Round on the shortest decimal representation (handoff 4.3): `1.005`
- * rounded to 2 places is `1.01`, matching what an analyst expects.
+ * Round on the shortest decimal representation (ADR 0012): `1.005` rounded
+ * to 2 places is `1.01`, matching what an analyst expects. `half-up` means
+ * away from zero, so `round(-2.5)` is `-3`, not the `-2` of `Math.round`.
  */
-export function roundDecimal(value: number, decimals = 0, mode: 'half-up' | 'half-even' | 'floor' | 'ceil' = 'half-up'): number {
+export type RoundingMode = 'half-up' | 'half-even' | 'half-down' | 'floor' | 'ceil' | 'trunc'
+
+export function roundDecimal(value: number, decimals = 0, mode: RoundingMode = 'half-up'): number {
   const factor = 10 ** decimals
   const shifted = Number(`${value}e${decimals}`)
-  let rounded: number
-  switch (mode) {
-    case 'floor':
-      rounded = Math.floor(shifted)
-      break
-    case 'ceil':
-      rounded = Math.ceil(shifted)
-      break
-    case 'half-even': {
-      const floor = Math.floor(shifted)
-      const diff = shifted - floor
-      if (Math.abs(diff - 0.5) < 1e-9) rounded = floor % 2 === 0 ? floor : floor + 1
-      else rounded = Math.round(shifted)
-      break
-    }
-    default: rounded = Math.round(shifted)
-  }
+  const rounded = roundInteger(shifted, mode)
   return Number(`${rounded}e-${decimals}`) || rounded / factor
+}
+
+function roundInteger(shifted: number, mode: RoundingMode): number {
+  const sign = shifted < 0 ? -1 : 1
+  const magnitude = Math.abs(shifted)
+  const floor = Math.floor(magnitude)
+  const fraction = magnitude - floor
+  const isHalf = Math.abs(fraction - 0.5) < 1e-9
+  switch (mode) {
+    case 'floor': return Math.floor(shifted)
+    case 'ceil': return Math.ceil(shifted)
+    case 'trunc': return sign * floor
+    case 'half-even': return sign * (isHalf ? (floor % 2 === 0 ? floor : floor + 1) : Math.round(magnitude))
+    case 'half-down': return sign * (isHalf ? floor : Math.round(magnitude))
+    default: return sign * (isHalf ? floor + 1 : Math.round(magnitude))
+  }
+}
+
+/**
+ * `scale(value, numerator, denominator, mode)`: multiply by a ratio and
+ * round to an integer in one step, so cents × factors never leave the
+ * integer domain (ADR 0012). `scale(12900, 85, 100)` is `10965`.
+ */
+export function scaleInteger(value: number, numerator: number, denominator: number, mode: RoundingMode = 'half-up'): number {
+  if (denominator === 0) throw new BlueprintError('DIVISION_BY_ZERO', 'scale: denominator is zero')
+  return roundInteger(value * numerator / denominator, mode)
 }
 
 function compareValues(a: unknown, b: unknown): number {
@@ -327,7 +340,9 @@ const builtinOperators: Record<string, OperatorFn> = {
   'abs': args => Math.abs(num(args[0], 'abs')),
   'floor': args => Math.floor(num(args[0], 'floor')),
   'ceil': args => Math.ceil(num(args[0], 'ceil')),
-  'round': args => roundDecimal(num(args[0], 'round'), args[1] === undefined ? 0 : num(args[1], 'round'), (args[2] as 'half-up') || 'half-up'),
+  'round': args => roundDecimal(num(args[0], 'round'), args[1] === undefined ? 0 : num(args[1], 'round'), (args[2] as RoundingMode) || 'half-up'),
+  /** `scale(value, numerator, denominator, mode?)`: integer result of value × num ÷ den. */
+  'scale': args => scaleInteger(num(args[0], 'scale'), num(args[1], 'scale'), args[2] === undefined ? 1 : num(args[2], 'scale'), (args[3] as RoundingMode) || 'half-up'),
   'clamp': args => Math.min(Math.max(num(args[0], 'clamp'), num(args[1], 'clamp')), num(args[2], 'clamp')),
   /** Percentage of a value in cents, rounded to an integer cent (half-up). */
   'percentOf': args => roundDecimal(num(args[0], 'percentOf') * num(args[1], 'percentOf') / 100, 0),

@@ -7,6 +7,7 @@ import { runActions, type ActionEffects, type ActionResult } from '../engine/act
 import { evaluateTemplate, isPageTemplate, resolvePage, routeOf, type AbstractNode, type ResolvedPage } from '../engine/template'
 import { deepClone, deepMerge, getPath, setPath, splitPath } from '../engine/path'
 import { hashDocument } from '../engine/hash'
+import { resolveRegistered } from '#blueprint/registry'
 import { endpointUrl } from '../engine/endpoints'
 import { livePathsOf } from '../engine/refs'
 
@@ -92,6 +93,15 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
     return '/' + parts.filter(Boolean).join('/')
   })
   const page = computed(() => route.value.params.app === app ? resolvePage(document, slugPath.value) : null)
+  // `time.now` (ADR 0007): one instant per evaluation pass. The browser
+  // refreshes it when the page or its params change and before every action
+  // run, so a definition that reads `context.now` is stable within a pass and
+  // current across passes. There is no tick between interactions (ticket 32).
+  const now = shallowRef(new Date().toISOString())
+  const refreshNow = () => {
+    now.value = new Date().toISOString()
+  }
+  watch(() => route.value.fullPath, refreshNow)
   const context = computed(() => ({
     app,
     version,
@@ -101,6 +111,7 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
     query: { ...route.value.query },
     page: page.value?.name || null,
     busy: busy.value,
+    now: now.value,
   }))
 
   const scope = (vars: Record<string, unknown> = {}): EvalScope => ({ state, context: context.value, vars })
@@ -152,6 +163,7 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
 
   const run = async (actions: BlueprintActions, vars: Record<string, unknown> = {}) => {
     busy.value = true
+    refreshNow()
     try {
       return await runActions(actions, { evaluator, state, context: context.value, initialState, effects }, vars)
     }
@@ -164,10 +176,12 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
     const current = page.value
     if (!current) return []
     const pageScope = scope()
-    const pageTree = evaluateTemplate(evaluator, current.name, pageScope)
+    // Components this runtime cannot draw fall back or show as unavailable (ADR 0026).
+    const available = (name: string) => Boolean(resolveRegistered(name))
+    const pageTree = evaluateTemplate(evaluator, current.name, pageScope, { available })
     const layout = current.template.layout === false ? undefined : (current.template.layout || document.content.meta.layout)
     if (!layout) return pageTree
-    return evaluateTemplate(evaluator, layout, scope({ page: current.name, pageTitle: current.template.title || '' }), { outlet: pageTree })
+    return evaluateTemplate(evaluator, layout, scope({ page: current.name, pageTitle: current.template.title || '' }), { outlet: pageTree, available })
   })
 
   // ---- persistence (client only) -------------------------------------------

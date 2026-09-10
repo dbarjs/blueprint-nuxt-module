@@ -1,5 +1,6 @@
 {
   "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "spec": "0.1",
   "id": "01J9HEALTHQUOTE0000000001",
   "name": "health-quote",
   "content": {
@@ -364,12 +365,11 @@
     "definitions": {
       "ageBand": {
         "type": "object",
-        "visibility": "private",
         "description": "Row of the age-bands table for the applicant, or the default row when the age is not insurable.",
         "logic": { "lookup": ["age-bands", { "obj": { "age": { "state": "applicant.age" } } }] }
       },
       "ageFactor": { "type": "number", "logic": { "get": [{ "def": "ageBand" }, "factor"] } },
-      "hasAge": { "type": "boolean", "visibility": "private", "logic": { "!": [{ "isEmpty": [{ "state": "applicant.age" }] }] } },
+      "hasAge": { "type": "boolean", "logic": { "!": [{ "isEmpty": [{ "state": "applicant.age" }] }] } },
       "eligible": {
         "type": "boolean",
         "description": "Only ages inside a band can be quoted.",
@@ -396,7 +396,6 @@
       },
       "dependents": {
         "type": "number",
-        "visibility": "private",
         "logic": { "clamp": [{ "coalesce": [{ "state": "applicant.dependents" }, 0] }, 0, { "resource": ["settings", "maxDependents"] }] }
       },
       "planQuotes": {
@@ -434,7 +433,6 @@
       },
       "selectedPlan": {
         "type": "object",
-        "visibility": "private",
         "logic": { "findBy": [{ "def": "planQuotes" }, "id", { "state": "applicant.plan" }] }
       },
       "monthly": { "type": "number", "logic": { "coalesce": [{ "get": [{ "def": "selectedPlan" }, "monthly"] }, 0] } },
@@ -489,7 +487,6 @@
       },
       "currentStatus": {
         "type": "object",
-        "visibility": "private",
         "logic": { "findBy": [{ "resource": "statuses" }, "id", { "state": "current.status" }] }
       },
       "canAccept": {
@@ -1088,7 +1085,44 @@
       { "name": "dependents are clamped", "state": { "applicant": { "age": 30, "dependents": 9 } }, "expect": { "pricing": { "planId": "balanced", "planLabel": "Balanced", "base": 21900, "dependents": 6, "dependentsAmount": 45990, "subtotal": 67890, "ageBand": "26 to 35", "ageFactor": 1, "risks": [{ "id": "active", "label": "Exercises regularly", "factor": 0.9, "icon": "i-lucide-bike", "tone": "success" }], "riskFactor": 0.9, "eligible": true, "monthly": 61101, "billing": "monthly", "annualDiscount": 0, "annual": 733212, "perPayment": 61101 } } },
       { "name": "an open quote under the current version can be accepted", "state": { "current": { "status": "open", "quotedUnder": "v1" } }, "context": { "version": "v1" }, "expect": { "canAccept": true, "quoteIsStale": false } },
       { "name": "a quote priced under another version is stale", "state": { "current": { "status": "open", "quotedUnder": "v0" } }, "context": { "version": "v1" }, "expect": { "canAccept": false, "quoteIsStale": true } },
-      { "name": "describes my quotes", "state": { "mine": { "items": [{ "id": "a" }], "total": 1, "email": "ada@example.com" } }, "expect": { "mineLabel": "1 quote for ada@example.com" } }
+      { "name": "describes my quotes", "state": { "mine": { "items": [{ "id": "a" }], "total": 1, "email": "ada@example.com" } }, "expect": { "mineLabel": "1 quote for ada@example.com" } },
+      {
+        "name": "a stale quote cannot be accepted",
+        "description": "Endpoint scenario (ADR 0011): the quote was priced under another version; the rates changed, so the answer is 409 and the record is untouched.",
+        "stubs": {"storage.collections": {"quotes": [{"id": "q1", "status": "open", "quotedUnder": "sha256:v0", "applicant": {"name": "Ada"}, "pricing": {"monthly": 1000}}]}},
+        "context": {"version": "sha256:v1"},
+        "request": {"endpoint": "accept-quote", "params": {"id": "q1"}},
+        "response": {"status": 409, "body": {"message": "Our rates changed since this quote was issued. Please ask for a new one."}},
+        "after": {"collections": {"quotes": [{"id": "q1", "status": "open"}]}}
+      },
+      {
+        "name": "accepting an open quote stamps the instant of the request",
+        "stubs": {"storage.collections": {"quotes": [{"id": "q1", "status": "open", "quotedUnder": "sha256:v1", "applicant": {"name": "Ada Lovelace", "email": "ada@example.com", "age": 30, "smoker": false, "alcohol": "none", "activity": "regular", "sleep": "normal", "dependents": 0, "plan": "balanced", "billing": "monthly"}, "pricing": {"monthly": 21425, "annual": 257100, "perPayment": 21425}}]}},
+        "context": {"version": "sha256:v1"},
+        "request": {"endpoint": "accept-quote", "params": {"id": "q1"}},
+        "response": {"status": 200, "body": {"id": "q1", "status": "accepted", "acceptedAt": "2024-01-01T00:00:00.000Z"}},
+        "after": {"collections": {"quotes": [{"id": "q1", "status": "accepted", "updatedAt": "2024-01-01T00:00:00.000Z"}]}, "effects": [{"capability": "storage.collections", "type": "findOne", "collection": "quotes"}, {"capability": "storage.collections", "type": "patch", "collection": "quotes", "ids": ["q1"]}, {"capability": "http.endpoints", "type": "respond", "status": 200}]}
+      },
+      {
+        "name": "a quote is priced by the server under the published version",
+        "context": {"version": "sha256:v1"},
+        "request": {"endpoint": "create-quote", "body": {"name": "Ada Lovelace", "email": "ada@example.com", "age": 30, "smoker": false, "alcohol": "none", "activity": "regular", "sleep": "normal", "dependents": 0, "plan": "balanced", "billing": "annual"}},
+        "response": {"status": 201, "body": {"status": "open", "quotedUnder": "sha256:v1", "pricing": {"monthly": 19710, "annual": 217598}}},
+        "after": {"collections": {"quotes": [{"status": "open", "applicant": {"email": "ada@example.com"}}]}}
+      },
+      {
+        "name": "an ineligible applicant gets the eligibility message, not a record",
+        "request": {"endpoint": "create-quote", "body": {"name": "Old Timer", "email": "old@example.com", "age": 99, "plan": "balanced", "billing": "monthly"}},
+        "response": {"status": 422},
+        "after": {"collections": {"quotes": []}}
+      },
+      {
+        "name": "the breakdown names every risk row",
+        "description": "Tree test: the price breakdown is base vocabulary only, so any runtime with a materializer must produce these nodes.",
+        "state": {"applicant": {"age": 40, "smoker": true, "alcohol": "none", "activity": "regular", "sleep": "normal", "dependents": 0, "plan": "balanced", "billing": "monthly"}},
+        "render": {"template": "component:price-breakdown", "with": {"pricing": {"def": "pricing"}}},
+        "contains": [{"as": "Text", "text": "Smoker"}]
+      }
     ]
   }
 }

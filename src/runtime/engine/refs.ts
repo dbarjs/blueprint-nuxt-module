@@ -9,6 +9,7 @@
 import type { BlueprintAction, BlueprintActions, BlueprintDocument, BlueprintTemplate, Logic, TemplateNode } from './types'
 import { templateNodes } from './template'
 import { isPlainObject } from './path'
+import { BASE_COMPONENT_NAMES } from './registry'
 
 export interface RefSet {
   definitions: Set<string>
@@ -22,6 +23,16 @@ export interface RefSet {
   endpoints: Set<string>
   /** Action types used (to check client/server placement). */
   actionTypes: Set<string>
+  /** First segment of every `context` read (`now`, `params`, `busy`...). */
+  contextKeys: Set<string>
+  /** State paths bound two-way with `model`. */
+  models: Set<string>
+  /** Components used only inside `fallback` trees (base vocabulary by rule). */
+  fallbackComponents: Set<string>
+  /** Non-base components without any fallback: where the document is locked. */
+  locked: Array<{ component: string, where: string }>
+  /** `submit` steps without an endpoint: they go to the built-in records API. */
+  submitsToRecords: Set<string>
   /** Raw html escape hatches and raw `class` props found. */
   escapes: string[]
   /** References that could not be resolved statically. */
@@ -40,6 +51,11 @@ export function createRefSet(): RefSet {
     collections: new Set(),
     endpoints: new Set(),
     actionTypes: new Set(),
+    contextKeys: new Set(),
+    models: new Set(),
+    fallbackComponents: new Set(),
+    locked: [],
+    submitsToRecords: new Set(),
     escapes: [],
     dynamic: [],
   }
@@ -63,6 +79,10 @@ export function refsOfLogic(logic: Logic, refs: RefSet, where: string): RefSet {
   const [operator] = Object.keys(logic)
   if (!operator) return refs
   const args = (logic as Record<string, unknown>)[operator]
+  if (operator === 'context') {
+    const first = Array.isArray(args) ? args[0] : args
+    if (typeof first === 'string') refs.contextKeys.add(first.split('.')[0]!)
+  }
   const target = REFERENCE_OPERATORS[operator]
   if (target) {
     const first = Array.isArray(args) ? args[0] : args
@@ -142,7 +162,9 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
     case 'submit':
     case 'fetch':
       if (action.type === 'submit' && action.schema) refs.schemas.add(action.schema)
+      if (action.type === 'submit' && !action.endpoint) refs.submitsToRecords.add(where)
       if (action.endpoint && !action.endpoint.startsWith('/')) refs.endpoints.add(action.endpoint)
+      if (action.result) refs.statePaths.add(action.result)
       if (action.body !== undefined) refsOfLogic(action.body, refs, `${where}.body`)
       for (const [key, value] of Object.entries(action.params || {})) refsOfLogic(value, refs, `${where}.params.${key}`)
       for (const [key, value] of Object.entries(action.query || {})) refsOfLogic(value, refs, `${where}.query.${key}`)
@@ -152,6 +174,7 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
     case 'insert':
       refs.collections.add(action.collection)
       refsOfLogic(action.data, refs, `${where}.data`)
+      if (action.result) refs.statePaths.add(action.result)
       break
     case 'find':
     case 'findOne':
@@ -159,11 +182,13 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
     case 'delete':
       refs.collections.add(action.collection)
       for (const key of ['id', 'where', 'limit', 'offset'] as const) if (action[key] !== undefined) refsOfLogic(action[key] as Logic, refs, `${where}.${key}`)
+      if (action.result) refs.statePaths.add(action.result)
       break
     case 'patch':
       refs.collections.add(action.collection)
       for (const key of ['id', 'where'] as const) if (action[key] !== undefined) refsOfLogic(action[key] as Logic, refs, `${where}.${key}`)
       for (const [key, value] of Object.entries(action.set || {})) refsOfLogic(value, refs, `${where}.set.${key}`)
+      if (action.result) refs.statePaths.add(action.result)
       break
     case 'respond':
       if (action.body !== undefined) refsOfLogic(action.body, refs, `${where}.body`)
@@ -186,12 +211,19 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
   return refs
 }
 
-export function refsOfNodes(nodes: TemplateNode[] | undefined, refs: RefSet, where: string): RefSet {
-  (nodes || []).forEach((node, index) => refsOfNode(node, refs, `${where}[${index}]`))
+export function refsOfNodes(nodes: TemplateNode[] | undefined, refs: RefSet, where: string, inFallback = false): RefSet {
+  (nodes || []).forEach((node, index) => refsOfNode(node, refs, `${where}[${index}]`, inFallback))
   return refs
 }
 
-function refsOfNode(node: TemplateNode, refs: RefSet, where: string): void {
+/** Names of the base vocabulary; anything else needs a fallback to stay portable (ADR 0026). */
+let baseNames: Set<string> | null = null
+function isBase(component: string): boolean {
+  if (!baseNames) baseNames = new Set(BASE_COMPONENT_NAMES)
+  return baseNames.has(component)
+}
+
+function refsOfNode(node: TemplateNode, refs: RefSet, where: string, inFallback: boolean): void {
   if (node.if !== undefined) refsOfLogic(node.if, refs, `${where}.if`)
   if (node.for) refsOfLogic(node.for.in, refs, `${where}.for.in`)
   switch (node.type) {
@@ -200,13 +232,13 @@ function refsOfNode(node: TemplateNode, refs: RefSet, where: string): void {
       break
     case 'if':
       refsOfLogic(node.condition, refs, `${where}.condition`)
-      refsOfNodes(node.children, refs, `${where}.children`)
-      refsOfNodes(node.else, refs, `${where}.else`)
+      refsOfNodes(node.children, refs, `${where}.children`, inFallback)
+      refsOfNodes(node.else, refs, `${where}.else`, inFallback)
       break
     case 'for':
       refsOfLogic(node.in, refs, `${where}.in`)
-      refsOfNodes(node.children, refs, `${where}.children`)
-      refsOfNodes(node.empty, refs, `${where}.empty`)
+      refsOfNodes(node.children, refs, `${where}.children`, inFallback)
+      refsOfNodes(node.empty, refs, `${where}.empty`, inFallback)
       break
     case 'template':
       refs.templates.add(node.name)
@@ -216,27 +248,39 @@ function refsOfNode(node: TemplateNode, refs: RefSet, where: string): void {
       break
     case 'html':
       refs.escapes.push(`${where}: raw html <${node.as}>`)
-      refsOfElementLike(node, refs, where)
+      refsOfElementLike(node, refs, where, inFallback)
       break
     case 'component':
-      refs.components.add(node.as)
+      if (inFallback) {
+        refs.fallbackComponents.add(node.as)
+        if (!isBase(node.as)) refs.dynamic.push(`${where}: fallback uses "${node.as}", which is not in the base vocabulary`)
+      }
+      else {
+        refs.components.add(node.as)
+        if (!isBase(node.as) && !node.fallback) refs.locked.push({ component: node.as, where })
+      }
       if (node.props && typeof node.props.class === 'string') refs.escapes.push(`${where}: raw class "${node.props.class}" on ${node.as}`)
-      if (node.as === 'UForm' && typeof node.props?.schema === 'string') refs.schemas.add(node.props.schema)
+      if ((node.as === 'UForm' || node.as === 'Form') && typeof node.props?.schema === 'string') refs.schemas.add(node.props.schema)
       if (typeof node.props?.to === 'string' && node.props.to.startsWith('endpoint:')) refs.endpoints.add(node.props.to.slice('endpoint:'.length))
       if (typeof node.props?.to === 'string' && node.props.to.startsWith('page:')) refs.templates.add(node.props.to)
-      if (node.model) refs.statePaths.add(typeof node.model === 'string' ? node.model : node.model.path)
-      refsOfElementLike(node, refs, where)
-      for (const [slot, nodes] of Object.entries(node.slots || {})) refsOfNodes(nodes, refs, `${where}.slots.${slot}`)
+      if (node.model) {
+        const path = typeof node.model === 'string' ? node.model : node.model.path
+        refs.statePaths.add(path)
+        refs.models.add(path)
+      }
+      refsOfElementLike(node, refs, where, inFallback)
+      for (const [slot, nodes] of Object.entries(node.slots || {})) refsOfNodes(nodes, refs, `${where}.slots.${slot}`, inFallback)
+      if (node.fallback) refsOfNodes(node.fallback, refs, `${where}.fallback`, true)
       break
     default:
       refs.dynamic.push(`${where}: unknown node type "${String((node as { type: string }).type)}"`)
   }
 }
 
-function refsOfElementLike(node: { bind?: Record<string, Logic>, content?: Logic, children?: TemplateNode[], on?: Record<string, BlueprintActions> }, refs: RefSet, where: string) {
+function refsOfElementLike(node: { bind?: Record<string, Logic>, content?: Logic, children?: TemplateNode[], on?: Record<string, BlueprintActions> }, refs: RefSet, where: string, inFallback: boolean) {
   for (const [prop, logic] of Object.entries(node.bind || {})) refsOfLogic(logic, refs, `${where}.bind.${prop}`)
   if (node.content !== undefined) refsOfLogic(node.content, refs, `${where}.content`)
-  refsOfNodes(node.children, refs, `${where}.children`)
+  refsOfNodes(node.children, refs, `${where}.children`, inFallback)
   for (const [event, actions] of Object.entries(node.on || {})) refsOfActions(actions, refs, `${where}.on.${event}`)
 }
 
@@ -278,6 +322,7 @@ export function refsOfDocument(document: BlueprintDocument): Record<string, RefS
   for (const [name, endpoint] of Object.entries(content.endpoints || {})) {
     const refs = createRefSet()
     for (const schemaName of Object.values(endpoint?.input || {})) if (typeof schemaName === 'string') refs.schemas.add(schemaName)
+    if (endpoint?.access !== undefined) refsOfLogic(endpoint.access, refs, `endpoints.${name}.access`)
     refsOfActions(endpoint?.handler, refs, `endpoints.${name}.handler`)
     out[`endpoints.${name}`] = refs
   }
@@ -335,7 +380,7 @@ export function livePathsOf(document: BlueprintDocument): Set<string> {
     for (const node of nodes || []) {
       const record = node as unknown as Record<string, unknown>
       for (const handler of Object.values((record.on as Record<string, BlueprintActions>) || {})) visitActions(handler)
-      for (const key of ['children', 'else', 'empty']) visitNodes(record[key] as TemplateNode[] | undefined)
+      for (const key of ['children', 'else', 'empty', 'fallback']) visitNodes(record[key] as TemplateNode[] | undefined)
       for (const slot of Object.values((record.slots as Record<string, TemplateNode[]>) || {})) visitNodes(slot)
     }
   }

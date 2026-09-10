@@ -6,8 +6,8 @@
  * Nitro handler only adapts the h3 event to `EndpointRequest` and back.
  */
 import type { BlueprintDocument, BlueprintEndpoint, HttpMethod, JsonSchema, ValidationIssue } from './types'
-import { createEvaluator } from './logic'
-import { runActions } from './actions'
+import { createEvaluator, truthy } from './logic'
+import { runActions, type EffectEntry } from './actions'
 import { createServerActions, type CollectionStore } from './server-actions'
 import { matchRoute } from './template'
 import { validateSchema } from './schema'
@@ -97,6 +97,12 @@ export interface RunEndpointOptions {
   now?: () => string
   /** Precomputed document version (hash) when the host already has it. */
   version?: string
+  /** Effect log of the run (ADR 0008), filled when provided. */
+  log?: EffectEntry[]
+  /** Extra context keys (tests, hosts with `identity`...). Never overrides the request's own. */
+  context?: Record<string, unknown>
+  /** Who is acting, from the `identity` provider; `null` when anonymous. Becomes `context.actor`. */
+  actor?: unknown
 }
 
 /**
@@ -115,6 +121,9 @@ export async function runEndpoint(document: BlueprintDocument, resolved: Resolve
   // One instant per request: `context.now` and every `createdAt` agree.
   const now = (options.now || (() => new Date().toISOString()))()
   const context = {
+    actor: null as unknown,
+    ...(options.context || {}),
+    ...(options.actor !== undefined ? { actor: options.actor } : {}),
     createdUnder: createdUnder ?? null,
     app: document.name,
     version,
@@ -147,6 +156,15 @@ export async function runEndpoint(document: BlueprintDocument, resolved: Resolve
   }
   if (issues.length) return { status: 422, body: { statusCode: 422, message: 'Validation failed', issues } }
 
+  // ---- access rule (ADR 0027): after inputs, before the handler -----------------
+  if (endpoint.access !== undefined) {
+    const allowed = truthy(evaluator.evaluate(endpoint.access, scope))
+    if (!allowed) {
+      const status = context.actor === null || context.actor === undefined ? 401 : 403
+      return { status, body: { statusCode: status, message: status === 401 ? 'Authentication required' : 'Forbidden', endpoint: name } }
+    }
+  }
+
   // ---- handler ----------------------------------------------------------------
   const extensions = createServerActions({ document, store: options.store, now: () => now })
   const result = await runActions(endpoint.handler, {
@@ -156,6 +174,8 @@ export async function runEndpoint(document: BlueprintDocument, resolved: Resolve
     initialState: deepClone(state),
     effects: { log: value => console.log(`[blueprint:${document.name}:${name}]`, value) },
     extensions,
+    log: options.log,
+    step: `endpoints.${name}`,
   })
   if (result.response) return result.response
   if (!result.ok) {

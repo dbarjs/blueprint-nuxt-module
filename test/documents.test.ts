@@ -19,8 +19,9 @@ describe('content documents', async () => {
   })
 
   for (const loaded of documents) {
-    describe(loaded.stem, () => {
-      const report = reportDocument(loaded, { base: BASE_COMPONENT_NAMES, nuxtUi: [], app: [] }, true)
+    describe(loaded.stem, async () => {
+      // Tree tests draw with the base vocabulary only; `U*` nodes fall back or are marked unavailable.
+      const report = await reportDocument(loaded, { base: BASE_COMPONENT_NAMES, nuxtUi: [], app: [] }, true)
 
       it('parses', () => {
         expect(loaded.parseError).toBeUndefined()
@@ -36,8 +37,12 @@ describe('content documents', async () => {
         expect(unknown).toEqual([])
       })
 
+      it('runs every test it carries', () => {
+        expect(report.tests.length).toBe((loaded.document.content.tests || []).length)
+      })
+
       for (const outcome of report.tests) {
-        it(`test: ${outcome.name}`, () => {
+        it(`${outcome.form} test: ${outcome.name}`, () => {
           const detail = outcome.error || outcome.failures.map(failure => `${failure.definition}: expected ${JSON.stringify(failure.expected)}, got ${JSON.stringify(failure.actual)}`).join('\n')
           expect(outcome.passed, detail).toBe(true)
         })

@@ -1,5 +1,6 @@
 {
   "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "spec": "0.1",
   "id": "01J9PUBLICBOARD00000000001",
   "name": "public-board",
   "content": {
@@ -158,7 +159,6 @@
       },
       "draftMood": {
         "type": "object",
-        "visibility": "private",
         "logic": { "findBy": [{ "resource": "moods" }, "id", { "state": "draft.mood" }] }
       },
       "postCount": { "type": "number", "logic": { "state": "board.total" } },
@@ -469,7 +469,48 @@
       { "name": "counts remaining characters", "state": { "draft": { "text": "  hello board  " } }, "expect": { "remaining": 269, "canPost": true } },
       { "name": "a note over the limit cannot be posted", "state": { "draft": { "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" } }, "expect": { "remaining": -1, "canPost": false } },
       { "name": "describes the whole board", "state": { "board": { "items": [{ "id": "a" }, { "id": "b" }], "total": 12 } }, "expect": { "postCount": 12, "shownCount": 2, "hasPosts": true, "filterLabel": "12 notes on the board" } },
-      { "name": "describes a filtered board", "state": { "board": { "items": [{ "id": "a" }], "total": 12 }, "filter": { "mood": "idea" } }, "expect": { "filterLabel": "1 note tagged idea" } }
+      { "name": "describes a filtered board", "state": { "board": { "items": [{ "id": "a" }], "total": 12 }, "filter": { "mood": "idea" } }, "expect": { "filterLabel": "1 note tagged idea" } },
+      {
+        "name": "a post lands in the collection with the runtime's fields and the version pin",
+        "description": "Endpoint scenario (ADR 0011): request in, response out, records after. The clock is fixed by the runner, so createdAt is reproducible.",
+        "request": {"endpoint": "create-post", "body": {"text": "  hello board  ", "mood": "idea"}},
+        "context": {"version": "sha256:test"},
+        "response": {"status": 201, "body": {"text": "hello board", "nickname": "anonymous", "mood": "idea", "postedUnder": "sha256:test"}},
+        "after": {"collections": {"posts": [{"text": "hello board", "mood": "idea", "createdAt": "2024-01-01T00:00:00.000Z"}]}, "effects": [{"capability": "storage.collections", "type": "insert", "collection": "posts", "data": {"text": "hello board", "mood": "idea"}}, {"capability": "http.endpoints", "type": "respond", "status": 201}]}
+      },
+      {
+        "name": "an empty post is refused by the schema before the handler runs",
+        "request": {"endpoint": "create-post", "body": {"text": ""}},
+        "response": {"status": 422},
+        "after": {"collections": {"posts": []}, "effects": []}
+      },
+      {
+        "name": "the board lists newest first and filters by mood",
+        "stubs": {"storage.collections": {"posts": [{"text": "old", "mood": "cheer", "createdAt": "2024-01-01T00:00:00.000Z"}, {"text": "new", "mood": "cheer", "createdAt": "2024-01-02T00:00:00.000Z"}, {"text": "other", "mood": "rant", "createdAt": "2024-01-03T00:00:00.000Z"}]}},
+        "request": {"endpoint": "list-posts", "query": {"mood": "cheer"}},
+        "response": {"status": 200, "body": {"items": [{"text": "new"}, {"text": "old"}], "total": 3, "generatedAt": "2024-01-01T00:00:00.000Z"}}
+      },
+      {
+        "name": "an unknown note is a 404, not an empty body",
+        "request": {"endpoint": "get-post", "params": {"id": "nope"}},
+        "response": {"status": 404, "body": {"statusCode": 404, "message": "No note with id nope"}}
+      },
+      {
+        "name": "publishing clears the draft, toasts and reloads the board",
+        "description": "Action scenario with stubbed capabilities: http.client answers the submit and the fetch; ui.toast is recorded; nothing leaves the test.",
+        "state": {"draft": {"text": "First!", "nickname": "ada", "mood": "cheer"}},
+        "run": "publish",
+        "stubs": {"http.client": [{"match": {"type": "submit", "endpoint": "create-post"}, "result": {"ok": true, "value": {"id": "p1", "text": "First!", "nickname": "ada", "mood": "cheer"}}}, {"match": {"type": "fetch", "endpoint": "list-posts"}, "result": {"ok": true, "value": {"items": [{"id": "p1", "text": "First!", "nickname": "ada", "mood": "cheer"}], "total": 1, "generatedAt": "2024-01-01T00:00:00.000Z"}}}], "ui.toast": [{"result": {"ok": true}}]},
+        "after": {"state": {"draft": {"text": ""}, "board": {"total": 1}}, "effects": [{"capability": "http.client", "type": "submit", "endpoint": "create-post"}, {"capability": "ui.toast", "type": "toast", "title": "Pinned to the board", "description": "Posted as ada"}, {"capability": "http.client", "type": "fetch", "endpoint": "list-posts"}], "expect": {"hasPosts": true, "postCount": 1}}
+      },
+      {
+        "name": "a rejected post keeps the draft and reports the error",
+        "state": {"draft": {"text": "First!", "nickname": "ada", "mood": "cheer"}},
+        "run": "publish",
+        "stubs": {"http.client": [{"match": {"type": "submit"}, "result": {"ok": false, "error": {"code": "SUBMIT_FAILED", "message": "board is closed", "status": 503}}}], "ui.toast": [{"result": {"ok": true}}]},
+        "error": "SUBMIT_FAILED",
+        "after": {"state": {"draft": {"text": "First!"}}, "effects": [{"capability": "http.client", "type": "submit"}, {"capability": "ui.toast", "type": "toast", "title": "Could not pin your note", "description": "SUBMIT_FAILED"}]}
+      }
     ]
   }
 }

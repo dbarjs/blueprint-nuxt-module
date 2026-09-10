@@ -4,7 +4,7 @@
  * A Blueprint runtime hosts documents, and a document has two halves: the
  * templates the browser draws and the endpoints the server runs. Beyond the
  * notation itself (which is the same everywhere), each runtime provides
- * *capabilities* on both sides — the components a template may draw, the
+ * capabilities* on both sides — the components a template may draw, the
  * storage backends and server actions a handler may use, where pages and
  * endpoints are mounted. The contract describes those capabilities and
  * doubles as the JSON Schema of the sections the runtime owns, so a document
@@ -99,7 +99,7 @@ export const RUNTIME_CONTRACT: RuntimeContract = {
     prefix: '',
     components: { base: [...BASE_COMPONENT_NAMES], nuxtUi: [], app: [] },
     nodeTypes: [...NODE_TYPES],
-    context: ['app', 'version', 'base', 'path', 'params', 'query', 'page', 'busy'],
+    context: ['app', 'version', 'base', 'path', 'params', 'query', 'page', 'busy', 'now'],
     state: {
       persistence: 'localStorage',
       description: 'Kept per app in the browser and restored while the document version matches. Live paths (fetch/submit results) are never persisted.',
@@ -235,6 +235,7 @@ export function runtimeSchema(contract: RuntimeContract = RUNTIME_CONTRACT): Rec
             additionalProperties: false,
           },
           pinned: { type: 'boolean', description: 'Refuse requests whose createdUnder.version differs from the published document (409).' },
+          access: { ...logic, description: 'Access rule over the request and context.actor, evaluated before the handler (401/403). Requires the identity capability.' },
           handler: { $ref: '#/$defs/handler' },
         },
         additionalProperties: false,
@@ -261,6 +262,7 @@ export function runtimeSchema(contract: RuntimeContract = RUNTIME_CONTRACT): Rec
           offset: logic,
           set: { type: 'object', additionalProperties: logic },
           as: { type: 'string', description: 'Variable receiving the result, readable by the next steps with { "var": "<as>" }.' },
+          result: { type: 'string', description: 'State path receiving the result (ADR 0008).' },
           status: { type: 'integer', minimum: 100, maximum: 599 },
           body: logic,
           headers: { type: 'object', additionalProperties: { type: 'string' } },

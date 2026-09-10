@@ -1,5 +1,6 @@
 {
   "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "spec": "0.1",
   "name": "hello-world",
   "content": {
     "meta": {
@@ -62,7 +63,21 @@
     },
     "tests": [
       { "name": "default greeting", "expect": { "greeting": "Hello", "message": "Hello, stranger!" } },
-      { "name": "greets by name in another language", "state": { "index": 1, "name": "Eduardo" }, "expect": { "message": "Olá, Eduardo!" } }
+      { "name": "greets by name in another language", "state": { "index": 1, "name": "Eduardo" }, "expect": { "message": "Olá, Eduardo!" } },
+      {
+        "name": "the page greets by name and offers another language",
+        "description": "Tree test (ADR 0011): the abstract tree is data; a runtime is conformant when it renders this tree.",
+        "state": {"name": "Ada", "index": 1},
+        "render": "page:index",
+        "contains": [{"as": "Heading", "text": "Olá, Ada!"}, {"as": "Button", "props": {"label": "Another language"}}, {"as": "Input", "props": {"placeholder": "Your name"}}]
+      },
+      {
+        "name": "cycling past the last greeting wraps around",
+        "description": "Action scenario: transforms only, so no stubs are needed and the effect log must be empty.",
+        "state": {"index": 4},
+        "run": ["next-greeting", "next-greeting"],
+        "after": {"state": {"index": 1}, "effects": [], "expect": {"greeting": "Olá"}}
+      }
     ]
   }
 }

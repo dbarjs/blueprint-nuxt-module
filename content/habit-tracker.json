@@ -1,0 +1,5479 @@
+{
+  "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "spec": "0.1",
+  "name": "habit-tracker",
+  "content": {
+    "meta": {
+      "title": "Habits",
+      "description": "A local-first habit tracker: streaks, a month grid and weekly targets, with no server at all. The first document whose core is calendar arithmetic; it does that arithmetic by hand because the notation has no date operators yet.",
+      "icon": "i-lucide-flame",
+      "layout": "component:shell",
+      "locale": "en-US",
+      "theme": {
+        "primary": "orange",
+        "neutral": "stone"
+      }
+    },
+    "resources": {
+      "settings": {
+        "type": "constant",
+        "data": {
+          "daysBack": 30,
+          "maxHabits": 12,
+          "calendarWindow": 45
+        }
+      },
+      "icons": {
+        "type": "options",
+        "data": [
+          {
+            "value": "i-lucide-book-open",
+            "label": "Read"
+          },
+          {
+            "value": "i-lucide-dumbbell",
+            "label": "Exercise"
+          },
+          {
+            "value": "i-lucide-glass-water",
+            "label": "Drink water"
+          },
+          {
+            "value": "i-lucide-moon",
+            "label": "Sleep early"
+          },
+          {
+            "value": "i-lucide-pen-line",
+            "label": "Write"
+          },
+          {
+            "value": "i-lucide-footprints",
+            "label": "Walk"
+          },
+          {
+            "value": "i-lucide-brain",
+            "label": "Meditate"
+          },
+          {
+            "value": "i-lucide-languages",
+            "label": "Study"
+          },
+          {
+            "value": "i-lucide-sparkles",
+            "label": "Anything"
+          }
+        ]
+      },
+      "colours": {
+        "type": "options",
+        "data": [
+          {
+            "value": "primary",
+            "label": "Primary"
+          },
+          {
+            "value": "success",
+            "label": "Green"
+          },
+          {
+            "value": "info",
+            "label": "Blue"
+          },
+          {
+            "value": "warning",
+            "label": "Amber"
+          },
+          {
+            "value": "error",
+            "label": "Red"
+          },
+          {
+            "value": "neutral",
+            "label": "Grey"
+          }
+        ]
+      },
+      "week-starts": {
+        "type": "options",
+        "data": [
+          {
+            "value": "monday",
+            "label": "Monday"
+          },
+          {
+            "value": "sunday",
+            "label": "Sunday"
+          }
+        ]
+      },
+      "weekday-names": {
+        "type": "list",
+        "data": [
+          "Sun",
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri",
+          "Sat"
+        ]
+      },
+      "month-names": {
+        "type": "list",
+        "data": [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December"
+        ]
+      }
+    },
+    "schemas": {
+      "habit": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "message": "Give the habit a name (up to 40 characters)."
+          },
+          "icon": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "success",
+              "warning",
+              "error",
+              "info",
+              "neutral"
+            ]
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7,
+            "message": "Target is between 1 and 7 days per week."
+          }
+        },
+        "required": [
+          "name",
+          "icon",
+          "color",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "habit-edit": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "message": "Give the habit a name (up to 40 characters)."
+          },
+          "target": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7,
+            "message": "Target is between 1 and 7 days per week."
+          }
+        },
+        "required": [
+          "name",
+          "target"
+        ]
+      }
+    },
+    "state": {
+      "habits": [],
+      "marks": [],
+      "nextId": 1,
+      "ui": {
+        "weekStart": "monday",
+        "draft": {
+          "name": "",
+          "icon": "i-lucide-sparkles",
+          "color": "primary",
+          "target": 7
+        },
+        "edit": {
+          "name": "",
+          "target": 7
+        },
+        "confirmReset": false
+      }
+    },
+    "definitions": {
+      "today": {
+        "type": "string",
+        "logic": {
+          "substr": [
+            {
+              "context": "now"
+            },
+            0,
+            10
+          ]
+        },
+        "description": "The calendar date of `context.now`, as YYYY-MM-DD. The runtime's `now` is UTC; see the pressure on time zones."
+      },
+      "todayParts": {
+        "type": "object",
+        "logic": {
+          "let": [
+            {
+              "p": {
+                "split": [
+                  {
+                    "def": "today"
+                  },
+                  "-"
+                ]
+              }
+            },
+            {
+              "obj": {
+                "y": {
+                  "+": [
+                    {
+                      "get": [
+                        {
+                          "var": "p"
+                        },
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "m": {
+                  "+": [
+                    {
+                      "get": [
+                        {
+                          "var": "p"
+                        },
+                        "1"
+                      ]
+                    }
+                  ]
+                },
+                "d": {
+                  "+": [
+                    {
+                      "get": [
+                        {
+                          "var": "p"
+                        },
+                        "2"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "todayDay": {
+        "type": "number",
+        "logic": {
+          "let": [
+            {
+              "y0": {
+                "if": [
+                  {
+                    "<=": [
+                      {
+                        "get": [
+                          {
+                            "def": "todayParts"
+                          },
+                          "m"
+                        ]
+                      },
+                      2
+                    ]
+                  },
+                  {
+                    "-": [
+                      {
+                        "get": [
+                          {
+                            "def": "todayParts"
+                          },
+                          "y"
+                        ]
+                      },
+                      1
+                    ]
+                  },
+                  {
+                    "get": [
+                      {
+                        "def": "todayParts"
+                      },
+                      "y"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": [
+                {
+                  "era": {
+                    "floor": [
+                      {
+                        "/": [
+                          {
+                            "var": "y0"
+                          },
+                          400
+                        ]
+                      }
+                    ]
+                  }
+                },
+                {
+                  "let": [
+                    {
+                      "yoe": {
+                        "-": [
+                          {
+                            "var": "y0"
+                          },
+                          {
+                            "*": [
+                              {
+                                "var": "era"
+                              },
+                              400
+                            ]
+                          }
+                        ]
+                      },
+                      "mp": {
+                        "if": [
+                          {
+                            ">": [
+                              {
+                                "get": [
+                                  {
+                                    "def": "todayParts"
+                                  },
+                                  "m"
+                                ]
+                              },
+                              2
+                            ]
+                          },
+                          {
+                            "-": [
+                              {
+                                "get": [
+                                  {
+                                    "def": "todayParts"
+                                  },
+                                  "m"
+                                ]
+                              },
+                              3
+                            ]
+                          },
+                          {
+                            "+": [
+                              {
+                                "get": [
+                                  {
+                                    "def": "todayParts"
+                                  },
+                                  "m"
+                                ]
+                              },
+                              9
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "let": [
+                        {
+                          "doy": {
+                            "+": [
+                              {
+                                "floor": [
+                                  {
+                                    "/": [
+                                      {
+                                        "+": [
+                                          {
+                                            "*": [
+                                              153,
+                                              {
+                                                "var": "mp"
+                                              }
+                                            ]
+                                          },
+                                          2
+                                        ]
+                                      },
+                                      5
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "get": [
+                                  {
+                                    "def": "todayParts"
+                                  },
+                                  "d"
+                                ]
+                              },
+                              -1
+                            ]
+                          }
+                        },
+                        {
+                          "let": [
+                            {
+                              "doe": {
+                                "+": [
+                                  {
+                                    "*": [
+                                      {
+                                        "var": "yoe"
+                                      },
+                                      365
+                                    ]
+                                  },
+                                  {
+                                    "floor": [
+                                      {
+                                        "/": [
+                                          {
+                                            "var": "yoe"
+                                          },
+                                          4
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "-": [
+                                      {
+                                        "floor": [
+                                          {
+                                            "/": [
+                                              {
+                                                "var": "yoe"
+                                              },
+                                              100
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "var": "doy"
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "+": [
+                                {
+                                  "*": [
+                                    {
+                                      "var": "era"
+                                    },
+                                    146097
+                                  ]
+                                },
+                                {
+                                  "var": "doe"
+                                },
+                                -719468
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "description": "Days since 1970-01-01, computed from the civil date by hand because the notation has no date operators (ticket 21)."
+      },
+      "todayWeekday": {
+        "type": "number",
+        "logic": {
+          "%": [
+            {
+              "+": [
+                {
+                  "def": "todayDay"
+                },
+                4
+              ]
+            },
+            7
+          ]
+        },
+        "description": "0 = Sunday … 6 = Saturday. 1970-01-01 was a Thursday."
+      },
+      "weekStartOffset": {
+        "type": "number",
+        "logic": {
+          "if": [
+            {
+              "==": [
+                {
+                  "state": "ui.weekStart"
+                },
+                "sunday"
+              ]
+            },
+            0,
+            1
+          ]
+        }
+      },
+      "weekStartDay": {
+        "type": "number",
+        "logic": {
+          "-": [
+            {
+              "def": "todayDay"
+            },
+            {
+              "%": [
+                {
+                  "+": [
+                    {
+                      "-": [
+                        {
+                          "def": "todayWeekday"
+                        },
+                        {
+                          "def": "weekStartOffset"
+                        }
+                      ]
+                    },
+                    7
+                  ]
+                },
+                7
+              ]
+            }
+          ]
+        },
+        "description": "Day number of the first day of the current week."
+      },
+      "calendar": {
+        "type": "array",
+        "logic": {
+          "map": [
+            {
+              "range": [
+                {
+                  "*": [
+                    {
+                      "resource": [
+                        "settings",
+                        "calendarWindow"
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "-": [
+                    {
+                      "def": "todayDay"
+                    },
+                    {
+                      "resource": [
+                        "settings",
+                        "calendarWindow"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "let": [
+                {
+                  "day": {
+                    "var": "n"
+                  },
+                  "c": {
+                    "let": [
+                      {
+                        "z": {
+                          "+": [
+                            {
+                              "var": "n"
+                            },
+                            719468
+                          ]
+                        }
+                      },
+                      {
+                        "let": [
+                          {
+                            "era": {
+                              "floor": [
+                                {
+                                  "/": [
+                                    {
+                                      "var": "z"
+                                    },
+                                    146097
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "let": [
+                              {
+                                "doe": {
+                                  "-": [
+                                    {
+                                      "var": "z"
+                                    },
+                                    {
+                                      "*": [
+                                        {
+                                          "var": "era"
+                                        },
+                                        146097
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "let": [
+                                  {
+                                    "yoe": {
+                                      "floor": [
+                                        {
+                                          "/": [
+                                            {
+                                              "+": [
+                                                {
+                                                  "var": "doe"
+                                                },
+                                                {
+                                                  "-": [
+                                                    {
+                                                      "floor": [
+                                                        {
+                                                          "/": [
+                                                            {
+                                                              "var": "doe"
+                                                            },
+                                                            1460
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "floor": [
+                                                    {
+                                                      "/": [
+                                                        {
+                                                          "var": "doe"
+                                                        },
+                                                        36524
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "-": [
+                                                    {
+                                                      "floor": [
+                                                        {
+                                                          "/": [
+                                                            {
+                                                              "var": "doe"
+                                                            },
+                                                            146096
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            365
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "let": [
+                                      {
+                                        "doy": {
+                                          "-": [
+                                            {
+                                              "var": "doe"
+                                            },
+                                            {
+                                              "+": [
+                                                {
+                                                  "*": [
+                                                    365,
+                                                    {
+                                                      "var": "yoe"
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "floor": [
+                                                    {
+                                                      "/": [
+                                                        {
+                                                          "var": "yoe"
+                                                        },
+                                                        4
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                {
+                                                  "-": [
+                                                    {
+                                                      "floor": [
+                                                        {
+                                                          "/": [
+                                                            {
+                                                              "var": "yoe"
+                                                            },
+                                                            100
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      {
+                                        "let": [
+                                          {
+                                            "mp": {
+                                              "floor": [
+                                                {
+                                                  "/": [
+                                                    {
+                                                      "+": [
+                                                        {
+                                                          "*": [
+                                                            5,
+                                                            {
+                                                              "var": "doy"
+                                                            }
+                                                          ]
+                                                        },
+                                                        2
+                                                      ]
+                                                    },
+                                                    153
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          {
+                                            "let": [
+                                              {
+                                                "d": {
+                                                  "+": [
+                                                    {
+                                                      "-": [
+                                                        {
+                                                          "var": "doy"
+                                                        },
+                                                        {
+                                                          "floor": [
+                                                            {
+                                                              "/": [
+                                                                {
+                                                                  "+": [
+                                                                    {
+                                                                      "*": [
+                                                                        153,
+                                                                        {
+                                                                          "var": "mp"
+                                                                        }
+                                                                      ]
+                                                                    },
+                                                                    2
+                                                                  ]
+                                                                },
+                                                                5
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    1
+                                                  ]
+                                                },
+                                                "m": {
+                                                  "if": [
+                                                    {
+                                                      "<": [
+                                                        {
+                                                          "var": "mp"
+                                                        },
+                                                        10
+                                                      ]
+                                                    },
+                                                    {
+                                                      "+": [
+                                                        {
+                                                          "var": "mp"
+                                                        },
+                                                        3
+                                                      ]
+                                                    },
+                                                    {
+                                                      "-": [
+                                                        {
+                                                          "var": "mp"
+                                                        },
+                                                        9
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              {
+                                                "obj": {
+                                                  "y": {
+                                                    "+": [
+                                                      {
+                                                        "var": "yoe"
+                                                      },
+                                                      {
+                                                        "*": [
+                                                          {
+                                                            "var": "era"
+                                                          },
+                                                          400
+                                                        ]
+                                                      },
+                                                      {
+                                                        "if": [
+                                                          {
+                                                            "<=": [
+                                                              {
+                                                                "var": "m"
+                                                              },
+                                                              2
+                                                            ]
+                                                          },
+                                                          1,
+                                                          0
+                                                        ]
+                                                      }
+                                                    ]
+                                                  },
+                                                  "m": {
+                                                    "var": "m"
+                                                  },
+                                                  "d": {
+                                                    "var": "d"
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                {
+                  "obj": {
+                    "day": {
+                      "var": "day"
+                    },
+                    "date": {
+                      "cat": [
+                        {
+                          "get": [
+                            {
+                              "var": "c"
+                            },
+                            "y"
+                          ]
+                        },
+                        "-",
+                        {
+                          "if": [
+                            {
+                              "<": [
+                                {
+                                  "get": [
+                                    {
+                                      "var": "c"
+                                    },
+                                    "m"
+                                  ]
+                                },
+                                10
+                              ]
+                            },
+                            {
+                              "cat": [
+                                "0",
+                                {
+                                  "get": [
+                                    {
+                                      "var": "c"
+                                    },
+                                    "m"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "cat": [
+                                {
+                                  "get": [
+                                    {
+                                      "var": "c"
+                                    },
+                                    "m"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "-",
+                        {
+                          "if": [
+                            {
+                              "<": [
+                                {
+                                  "get": [
+                                    {
+                                      "var": "c"
+                                    },
+                                    "d"
+                                  ]
+                                },
+                                10
+                              ]
+                            },
+                            {
+                              "cat": [
+                                "0",
+                                {
+                                  "get": [
+                                    {
+                                      "var": "c"
+                                    },
+                                    "d"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "cat": [
+                                {
+                                  "get": [
+                                    {
+                                      "var": "c"
+                                    },
+                                    "d"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "y": {
+                      "get": [
+                        {
+                          "var": "c"
+                        },
+                        "y"
+                      ]
+                    },
+                    "m": {
+                      "get": [
+                        {
+                          "var": "c"
+                        },
+                        "m"
+                      ]
+                    },
+                    "d": {
+                      "get": [
+                        {
+                          "var": "c"
+                        },
+                        "d"
+                      ]
+                    },
+                    "weekday": {
+                      "%": [
+                        {
+                          "+": [
+                            {
+                              "var": "day"
+                            },
+                            4
+                          ]
+                        },
+                        7
+                      ]
+                    },
+                    "offset": {
+                      "-": [
+                        {
+                          "var": "day"
+                        },
+                        {
+                          "def": "todayDay"
+                        }
+                      ]
+                    },
+                    "isToday": {
+                      "==": [
+                        {
+                          "var": "day"
+                        },
+                        {
+                          "def": "todayDay"
+                        }
+                      ]
+                    },
+                    "isFuture": {
+                      ">": [
+                        {
+                          "var": "day"
+                        },
+                        {
+                          "def": "todayDay"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "n"
+          ]
+        },
+        "description": "Every day in a window around today, converted once so every other definition looks dates up here instead of repeating the arithmetic."
+      },
+      "weekDates": {
+        "type": "array",
+        "logic": {
+          "pluck": [
+            {
+              "filter": [
+                {
+                  "def": "calendar"
+                },
+                {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "item.day"
+                        },
+                        {
+                          "def": "weekStartDay"
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "item.day"
+                        },
+                        {
+                          "def": "todayDay"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "date"
+          ]
+        }
+      },
+      "windowDates": {
+        "type": "array",
+        "logic": {
+          "pluck": [
+            {
+              "filter": [
+                {
+                  "def": "calendar"
+                },
+                {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "var": "item.offset"
+                        },
+                        {
+                          "-": [
+                            {
+                              "resource": [
+                                "settings",
+                                "daysBack"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "item.offset"
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "date"
+          ]
+        },
+        "description": "The dates that count for streaks and rates: the last `daysBack` days including today."
+      },
+      "habitCount": {
+        "type": "number",
+        "logic": {
+          "length": [
+            {
+              "state": "habits"
+            }
+          ]
+        }
+      },
+      "hasHabits": {
+        "type": "boolean",
+        "logic": {
+          ">": [
+            {
+              "def": "habitCount"
+            },
+            0
+          ]
+        }
+      },
+      "canAddHabit": {
+        "type": "boolean",
+        "logic": {
+          "<": [
+            {
+              "def": "habitCount"
+            },
+            {
+              "resource": [
+                "settings",
+                "maxHabits"
+              ]
+            }
+          ]
+        }
+      },
+      "habitStats": {
+        "type": "array",
+        "logic": {
+          "map": [
+            {
+              "state": "habits"
+            },
+            {
+              "let": [
+                {
+                  "dates": {
+                    "pluck": [
+                      {
+                        "filterBy": [
+                          {
+                            "state": "marks"
+                          },
+                          "habitId",
+                          {
+                            "var": "habit.id"
+                          }
+                        ]
+                      },
+                      "date"
+                    ]
+                  }
+                },
+                {
+                  "let": [
+                    {
+                      "current": {
+                        "reduce": [
+                          {
+                            "range": [
+                              {
+                                "resource": [
+                                  "settings",
+                                  "daysBack"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "let": [
+                              {
+                                "marked": {
+                                  "in": [
+                                    {
+                                      "get": [
+                                        {
+                                          "findBy": [
+                                            {
+                                              "def": "calendar"
+                                            },
+                                            "day",
+                                            {
+                                              "-": [
+                                                {
+                                                  "def": "todayDay"
+                                                },
+                                                {
+                                                  "var": "current"
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "date"
+                                      ]
+                                    },
+                                    {
+                                      "var": "dates"
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "if": [
+                                  {
+                                    "and": [
+                                      {
+                                        "var": "marked"
+                                      },
+                                      {
+                                        "get": [
+                                          {
+                                            "var": "accumulator"
+                                          },
+                                          "alive"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "obj": {
+                                      "count": {
+                                        "+": [
+                                          {
+                                            "get": [
+                                              {
+                                                "var": "accumulator"
+                                              },
+                                              "count"
+                                            ]
+                                          },
+                                          1
+                                        ]
+                                      },
+                                      "alive": true
+                                    }
+                                  },
+                                  {
+                                    "if": [
+                                      {
+                                        "and": [
+                                          {
+                                            "!": [
+                                              {
+                                                "var": "marked"
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            ">": [
+                                              {
+                                                "var": "current"
+                                              },
+                                              0
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "obj": {
+                                          "count": {
+                                            "get": [
+                                              {
+                                                "var": "accumulator"
+                                              },
+                                              "count"
+                                            ]
+                                          },
+                                          "alive": false
+                                        }
+                                      },
+                                      {
+                                        "var": "accumulator"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "obj": {
+                              "count": 0,
+                              "alive": true
+                            }
+                          }
+                        ]
+                      },
+                      "best": {
+                        "reduce": [
+                          {
+                            "def": "windowDates"
+                          },
+                          {
+                            "let": [
+                              {
+                                "marked": {
+                                  "in": [
+                                    {
+                                      "var": "current"
+                                    },
+                                    {
+                                      "var": "dates"
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "if": [
+                                  {
+                                    "var": "marked"
+                                  },
+                                  {
+                                    "obj": {
+                                      "run": {
+                                        "+": [
+                                          {
+                                            "get": [
+                                              {
+                                                "var": "accumulator"
+                                              },
+                                              "run"
+                                            ]
+                                          },
+                                          1
+                                        ]
+                                      },
+                                      "best": {
+                                        "max": [
+                                          {
+                                            "get": [
+                                              {
+                                                "var": "accumulator"
+                                              },
+                                              "best"
+                                            ]
+                                          },
+                                          {
+                                            "+": [
+                                              {
+                                                "get": [
+                                                  {
+                                                    "var": "accumulator"
+                                                  },
+                                                  "run"
+                                                ]
+                                              },
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "obj": {
+                                      "run": 0,
+                                      "best": {
+                                        "get": [
+                                          {
+                                            "var": "accumulator"
+                                          },
+                                          "best"
+                                        ]
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "obj": {
+                              "run": 0,
+                              "best": 0
+                            }
+                          }
+                        ]
+                      },
+                      "windowDone": {
+                        "count": [
+                          {
+                            "var": "dates"
+                          },
+                          {
+                            "in": [
+                              {
+                                "var": "item"
+                              },
+                              {
+                                "def": "windowDates"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "weekDone": {
+                        "count": [
+                          {
+                            "var": "dates"
+                          },
+                          {
+                            "in": [
+                              {
+                                "var": "item"
+                              },
+                              {
+                                "def": "weekDates"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "obj": {
+                        "id": {
+                          "var": "habit.id"
+                        },
+                        "name": {
+                          "var": "habit.name"
+                        },
+                        "icon": {
+                          "var": "habit.icon"
+                        },
+                        "color": {
+                          "var": "habit.color"
+                        },
+                        "target": {
+                          "var": "habit.target"
+                        },
+                        "doneToday": {
+                          "in": [
+                            {
+                              "def": "today"
+                            },
+                            {
+                              "var": "dates"
+                            }
+                          ]
+                        },
+                        "currentStreak": {
+                          "get": [
+                            {
+                              "var": "current"
+                            },
+                            "count"
+                          ]
+                        },
+                        "bestStreak": {
+                          "get": [
+                            {
+                              "var": "best"
+                            },
+                            "best"
+                          ]
+                        },
+                        "windowDone": {
+                          "var": "windowDone"
+                        },
+                        "rateBp": {
+                          "round": [
+                            {
+                              "/": [
+                                {
+                                  "*": [
+                                    {
+                                      "var": "windowDone"
+                                    },
+                                    10000
+                                  ]
+                                },
+                                {
+                                  "resource": [
+                                    "settings",
+                                    "daysBack"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "weekDone": {
+                          "var": "weekDone"
+                        },
+                        "weekTargetMet": {
+                          ">=": [
+                            {
+                              "var": "weekDone"
+                            },
+                            {
+                              "var": "habit.target"
+                            }
+                          ]
+                        },
+                        "last7": {
+                          "map": [
+                            {
+                              "range": [
+                                7,
+                                -6
+                              ]
+                            },
+                            {
+                              "let": [
+                                {
+                                  "entry": {
+                                    "findBy": [
+                                      {
+                                        "def": "calendar"
+                                      },
+                                      "offset",
+                                      {
+                                        "var": "o"
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "obj": {
+                                    "date": {
+                                      "get": [
+                                        {
+                                          "var": "entry"
+                                        },
+                                        "date"
+                                      ]
+                                    },
+                                    "weekday": {
+                                      "get": [
+                                        {
+                                          "var": "entry"
+                                        },
+                                        "weekday"
+                                      ]
+                                    },
+                                    "weekdayName": {
+                                      "get": [
+                                        {
+                                          "resource": "weekday-names"
+                                        },
+                                        {
+                                          "cat": [
+                                            {
+                                              "get": [
+                                                {
+                                                  "var": "entry"
+                                                },
+                                                "weekday"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "isToday": {
+                                      "get": [
+                                        {
+                                          "var": "entry"
+                                        },
+                                        "isToday"
+                                      ]
+                                    },
+                                    "done": {
+                                      "in": [
+                                        {
+                                          "get": [
+                                            {
+                                              "var": "entry"
+                                            },
+                                            "date"
+                                          ]
+                                        },
+                                        {
+                                          "var": "dates"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "o"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "habit"
+          ]
+        },
+        "description": "Per habit: streaks, rates and the last seven days. One pass over the marks per habit; the calendar is memoized."
+      },
+      "weekDone": {
+        "type": "number",
+        "logic": {
+          "sum": [
+            {
+              "def": "habitStats"
+            },
+            {
+              "min": [
+                {
+                  "var": "item.weekDone"
+                },
+                {
+                  "var": "item.target"
+                }
+              ]
+            }
+          ]
+        },
+        "description": "Marks this week, capped per habit at its target."
+      },
+      "weekTarget": {
+        "type": "number",
+        "logic": {
+          "sum": [
+            {
+              "state": "habits"
+            },
+            "target"
+          ]
+        }
+      },
+      "weekCompletionBp": {
+        "type": "number",
+        "logic": {
+          "if": [
+            {
+              "==": [
+                {
+                  "def": "weekTarget"
+                },
+                0
+              ]
+            },
+            0,
+            {
+              "round": [
+                {
+                  "/": [
+                    {
+                      "*": [
+                        {
+                          "def": "weekDone"
+                        },
+                        10000
+                      ]
+                    },
+                    {
+                      "def": "weekTarget"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "description": "Integer basis points so tests are exact; formatted with `percent` for display."
+      },
+      "weekCompletionLabel": {
+        "type": "string",
+        "logic": {
+          "format": [
+            {
+              "/": [
+                {
+                  "def": "weekCompletionBp"
+                },
+                10000
+              ]
+            },
+            "percent"
+          ]
+        }
+      },
+      "weekStartDate": {
+        "type": "string",
+        "logic": {
+          "get": [
+            {
+              "findBy": [
+                {
+                  "def": "calendar"
+                },
+                "day",
+                {
+                  "def": "weekStartDay"
+                }
+              ]
+            },
+            "date"
+          ]
+        }
+      },
+      "weekdayHeaders": {
+        "type": "array",
+        "logic": {
+          "map": [
+            {
+              "range": [
+                7
+              ]
+            },
+            {
+              "get": [
+                {
+                  "resource": "weekday-names"
+                },
+                {
+                  "cat": [
+                    {
+                      "%": [
+                        {
+                          "+": [
+                            {
+                              "var": "item"
+                            },
+                            {
+                              "def": "weekStartOffset"
+                            }
+                          ]
+                        },
+                        7
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "habit": {
+        "type": "object",
+        "logic": {
+          "findBy": [
+            {
+              "state": "habits"
+            },
+            "id",
+            {
+              "context": "params.id"
+            }
+          ]
+        }
+      },
+      "habitExists": {
+        "type": "boolean",
+        "logic": {
+          "!": [
+            {
+              "isEmpty": [
+                {
+                  "def": "habit"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "habitStat": {
+        "type": "object",
+        "logic": {
+          "findBy": [
+            {
+              "def": "habitStats"
+            },
+            "id",
+            {
+              "context": "params.id"
+            }
+          ]
+        }
+      },
+      "habitDates": {
+        "type": "array",
+        "logic": {
+          "pluck": [
+            {
+              "filterBy": [
+                {
+                  "state": "marks"
+                },
+                "habitId",
+                {
+                  "context": "params.id"
+                }
+              ]
+            },
+            "date"
+          ]
+        }
+      },
+      "monthTitle": {
+        "type": "string",
+        "logic": {
+          "cat": [
+            {
+              "get": [
+                {
+                  "resource": "month-names"
+                },
+                {
+                  "cat": [
+                    {
+                      "-": [
+                        {
+                          "get": [
+                            {
+                              "def": "todayParts"
+                            },
+                            "m"
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            " ",
+            {
+              "get": [
+                {
+                  "def": "todayParts"
+                },
+                "y"
+              ]
+            }
+          ]
+        }
+      },
+      "monthGridStart": {
+        "type": "number",
+        "logic": {
+          "let": [
+            {
+              "first": {
+                "-": [
+                  {
+                    "def": "todayDay"
+                  },
+                  {
+                    "-": [
+                      {
+                        "get": [
+                          {
+                            "def": "todayParts"
+                          },
+                          "d"
+                        ]
+                      },
+                      1
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": [
+                {
+                  "wd": {
+                    "%": [
+                      {
+                        "+": [
+                          {
+                            "var": "first"
+                          },
+                          4
+                        ]
+                      },
+                      7
+                    ]
+                  }
+                },
+                {
+                  "-": [
+                    {
+                      "var": "first"
+                    },
+                    {
+                      "%": [
+                        {
+                          "+": [
+                            {
+                              "-": [
+                                {
+                                  "var": "wd"
+                                },
+                                {
+                                  "def": "weekStartOffset"
+                                }
+                              ]
+                            },
+                            7
+                          ]
+                        },
+                        7
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "description": "Day number of the first cell: the week-start on or before the first of the month."
+      },
+      "monthGridStartDate": {
+        "type": "string",
+        "logic": {
+          "get": [
+            {
+              "findBy": [
+                {
+                  "def": "calendar"
+                },
+                "day",
+                {
+                  "def": "monthGridStart"
+                }
+              ]
+            },
+            "date"
+          ]
+        }
+      },
+      "monthGrid": {
+        "type": "array",
+        "logic": {
+          "map": [
+            {
+              "range": [
+                42,
+                {
+                  "def": "monthGridStart"
+                }
+              ]
+            },
+            {
+              "let": [
+                {
+                  "entry": {
+                    "findBy": [
+                      {
+                        "def": "calendar"
+                      },
+                      "day",
+                      {
+                        "var": "n"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "obj": {
+                    "day": {
+                      "var": "n"
+                    },
+                    "date": {
+                      "get": [
+                        {
+                          "var": "entry"
+                        },
+                        "date"
+                      ]
+                    },
+                    "d": {
+                      "get": [
+                        {
+                          "var": "entry"
+                        },
+                        "d"
+                      ]
+                    },
+                    "inMonth": {
+                      "==": [
+                        {
+                          "get": [
+                            {
+                              "var": "entry"
+                            },
+                            "m"
+                          ]
+                        },
+                        {
+                          "get": [
+                            {
+                              "def": "todayParts"
+                            },
+                            "m"
+                          ]
+                        }
+                      ]
+                    },
+                    "isToday": {
+                      "get": [
+                        {
+                          "var": "entry"
+                        },
+                        "isToday"
+                      ]
+                    },
+                    "isFuture": {
+                      "get": [
+                        {
+                          "var": "entry"
+                        },
+                        "isFuture"
+                      ]
+                    },
+                    "done": {
+                      "in": [
+                        {
+                          "get": [
+                            {
+                              "var": "entry"
+                            },
+                            "date"
+                          ]
+                        },
+                        {
+                          "def": "habitDates"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "n"
+          ]
+        },
+        "description": "Six weeks of cells covering the current month, for the habit page."
+      },
+      "monthGridSize": {
+        "type": "number",
+        "logic": {
+          "length": [
+            {
+              "def": "monthGrid"
+            }
+          ]
+        }
+      },
+      "editIsDirty": {
+        "type": "boolean",
+        "logic": {
+          "or": [
+            {
+              "!=": [
+                {
+                  "state": "ui.edit.name"
+                },
+                {
+                  "get": [
+                    {
+                      "def": "habit"
+                    },
+                    "name"
+                  ]
+                }
+              ]
+            },
+            {
+              "!=": [
+                {
+                  "state": "ui.edit.target"
+                },
+                {
+                  "get": [
+                    {
+                      "def": "habit"
+                    },
+                    "target"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "summaryLines": {
+        "type": "array",
+        "logic": {
+          "map": [
+            {
+              "def": "habitStats"
+            },
+            {
+              "cat": [
+                {
+                  "var": "item.name"
+                },
+                ": ",
+                {
+                  "var": "item.weekDone"
+                },
+                "/",
+                {
+                  "var": "item.target"
+                },
+                {
+                  "if": [
+                    {
+                      "var": "item.weekTargetMet"
+                    },
+                    " ✓",
+                    ""
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "actions": {
+      "toggle-mark": {
+        "description": "Marks or unmarks one habit on one date. Reads `habitId` and `date` from the call. Future dates are ignored.",
+        "type": "if",
+        "condition": {
+          "!": [
+            {
+              "get": [
+                {
+                  "findBy": [
+                    {
+                      "def": "calendar"
+                    },
+                    "date",
+                    {
+                      "var": "date"
+                    }
+                  ]
+                },
+                "isFuture"
+              ]
+            }
+          ]
+        },
+        "then": {
+          "type": "if",
+          "condition": {
+            "some": [
+              {
+                "state": "marks"
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "var": "item.habitId"
+                      },
+                      {
+                        "var": "habitId"
+                      }
+                    ]
+                  },
+                  {
+                    "==": [
+                      {
+                        "var": "item.date"
+                      },
+                      {
+                        "var": "date"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "then": {
+            "type": "remove",
+            "path": "marks",
+            "where": {
+              "and": [
+                {
+                  "==": [
+                    {
+                      "var": "item.habitId"
+                    },
+                    {
+                      "var": "habitId"
+                    }
+                  ]
+                },
+                {
+                  "==": [
+                    {
+                      "var": "item.date"
+                    },
+                    {
+                      "var": "date"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "type": "push",
+            "path": "marks",
+            "value": {
+              "obj": {
+                "habitId": {
+                  "var": "habitId"
+                },
+                "date": {
+                  "var": "date"
+                }
+              }
+            }
+          }
+        }
+      },
+      "add-habit": {
+        "type": "validate",
+        "schema": "habit",
+        "path": "ui.draft",
+        "then": [
+          {
+            "type": "push",
+            "path": "habits",
+            "value": {
+              "assign": [
+                {
+                  "state": "ui.draft"
+                },
+                {
+                  "obj": {
+                    "id": {
+                      "cat": [
+                        "h",
+                        {
+                          "state": "nextId"
+                        }
+                      ]
+                    },
+                    "createdOn": {
+                      "def": "today"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "increment",
+            "path": "nextId"
+          },
+          {
+            "type": "reset",
+            "path": "ui.draft"
+          },
+          {
+            "type": "toast",
+            "title": "Habit added",
+            "color": "success",
+            "icon": "i-lucide-sprout"
+          },
+          {
+            "type": "navigate",
+            "to": "/"
+          }
+        ],
+        "else": {
+          "type": "toast",
+          "title": "Check the form",
+          "description": {
+            "join": [
+              {
+                "pluck": [
+                  {
+                    "var": "issues"
+                  },
+                  "message"
+                ]
+              },
+              " "
+            ]
+          },
+          "color": "error"
+        }
+      },
+      "save-habit": {
+        "type": "validate",
+        "schema": "habit-edit",
+        "path": "ui.edit",
+        "then": [
+          {
+            "type": "update",
+            "path": "habits",
+            "where": {
+              "==": [
+                {
+                  "var": "item.id"
+                },
+                {
+                  "context": "params.id"
+                }
+              ]
+            },
+            "set": {
+              "name": {
+                "trim": [
+                  {
+                    "state": "ui.edit.name"
+                  }
+                ]
+              },
+              "target": {
+                "state": "ui.edit.target"
+              }
+            }
+          },
+          {
+            "type": "toast",
+            "title": "Saved",
+            "color": "success"
+          }
+        ],
+        "else": {
+          "type": "toast",
+          "title": "Check the form",
+          "description": {
+            "join": [
+              {
+                "pluck": [
+                  {
+                    "var": "issues"
+                  },
+                  "message"
+                ]
+              },
+              " "
+            ]
+          },
+          "color": "error"
+        }
+      },
+      "delete-habit": [
+        {
+          "type": "remove",
+          "path": "marks",
+          "where": {
+            "==": [
+              {
+                "var": "item.habitId"
+              },
+              {
+                "context": "params.id"
+              }
+            ]
+          }
+        },
+        {
+          "type": "remove",
+          "path": "habits",
+          "where": {
+            "==": [
+              {
+                "var": "item.id"
+              },
+              {
+                "context": "params.id"
+              }
+            ]
+          }
+        },
+        {
+          "type": "toast",
+          "title": "Habit removed",
+          "color": "neutral"
+        },
+        {
+          "type": "navigate",
+          "to": "/"
+        }
+      ],
+      "reset-all": [
+        {
+          "type": "reset"
+        },
+        {
+          "type": "toast",
+          "title": "Fresh start",
+          "description": "Everything was removed.",
+          "color": "neutral"
+        },
+        {
+          "type": "navigate",
+          "to": "/"
+        }
+      ]
+    },
+    "templates": {
+      "component:shell": [
+        {
+          "type": "component",
+          "as": "Header",
+          "children": [
+            {
+              "type": "component",
+              "as": "Container",
+              "children": [
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": {
+                    "direction": "row",
+                    "justify": "between",
+                    "align": "center",
+                    "paddingY": "sm"
+                  },
+                  "children": [
+                    {
+                      "type": "component",
+                      "as": "Link",
+                      "props": {
+                        "to": "/"
+                      },
+                      "children": [
+                        {
+                          "type": "component",
+                          "as": "Stack",
+                          "props": {
+                            "direction": "row",
+                            "gap": "sm",
+                            "align": "center"
+                          },
+                          "children": [
+                            {
+                              "type": "component",
+                              "as": "Icon",
+                              "props": {
+                                "name": "i-lucide-flame",
+                                "color": "primary"
+                              }
+                            },
+                            {
+                              "type": "component",
+                              "as": "Heading",
+                              "props": {
+                                "level": 3
+                              },
+                              "content": "Habits"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "component",
+                      "as": "Stack",
+                      "props": {
+                        "direction": "row",
+                        "gap": "sm",
+                        "align": "center"
+                      },
+                      "children": [
+                        {
+                          "type": "component",
+                          "as": "Button",
+                          "props": {
+                            "label": "New habit",
+                            "icon": "i-lucide-plus",
+                            "to": "/new",
+                            "size": "sm"
+                          },
+                          "bind": {
+                            "disabled": {
+                              "!": [
+                                {
+                                  "def": "canAddHabit"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "component",
+                          "as": "Button",
+                          "props": {
+                            "icon": "i-lucide-settings",
+                            "to": "/settings",
+                            "variant": "ghost",
+                            "color": "neutral",
+                            "size": "sm",
+                            "aria-label": "Settings"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "component",
+          "as": "Main",
+          "children": [
+            {
+              "type": "component",
+              "as": "Container",
+              "children": [
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": {
+                    "gap": "lg",
+                    "paddingY": "lg"
+                  },
+                  "children": [
+                    {
+                      "type": "outlet"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "component",
+          "as": "Footer",
+          "children": [
+            {
+              "type": "component",
+              "as": "Container",
+              "children": [
+                {
+                  "type": "component",
+                  "as": "Text",
+                  "props": {
+                    "size": "xs",
+                    "color": "dimmed",
+                    "align": "center"
+                  },
+                  "content": "Everything stays in this browser. No account, no server."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "component:stat": [
+        {
+          "type": "component",
+          "as": "Group",
+          "children": [
+            {
+              "type": "component",
+              "as": "Stack",
+              "props": {
+                "gap": "none"
+              },
+              "children": [
+                {
+                  "type": "component",
+                  "as": "Text",
+                  "props": {
+                    "size": "xs",
+                    "color": "muted",
+                    "weight": "medium"
+                  },
+                  "bind": {
+                    "content": {
+                      "var": "label"
+                    }
+                  }
+                },
+                {
+                  "type": "component",
+                  "as": "Text",
+                  "props": {
+                    "size": "2xl",
+                    "weight": "bold",
+                    "tabular": true
+                  },
+                  "bind": {
+                    "content": {
+                      "var": "value"
+                    }
+                  }
+                },
+                {
+                  "type": "component",
+                  "as": "Text",
+                  "props": {
+                    "size": "xs",
+                    "color": "dimmed"
+                  },
+                  "bind": {
+                    "content": {
+                      "var": "unit"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "page:index": {
+        "route": "/",
+        "title": "Today",
+        "children": [
+          {
+            "type": "component",
+            "as": "Stack",
+            "props": {
+              "direction": "row",
+              "justify": "between",
+              "align": "end",
+              "responsive": true,
+              "gap": "lg"
+            },
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "gap": "xs"
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Heading",
+                    "props": {
+                      "level": 1
+                    },
+                    "content": "Today"
+                  },
+                  {
+                    "type": "component",
+                    "as": "Text",
+                    "props": {
+                      "color": "muted"
+                    },
+                    "bind": {
+                      "content": {
+                        "format": [
+                          {
+                            "def": "today"
+                          },
+                          "date"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "if",
+                "condition": {
+                  "def": "hasHabits"
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "gap": "xs",
+                      "surface": "muted",
+                      "padding": "md"
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Text",
+                        "props": {
+                          "size": "sm",
+                          "color": "muted"
+                        },
+                        "bind": {
+                          "content": {
+                            "cat": [
+                              "Week of ",
+                              {
+                                "format": [
+                                  {
+                                    "def": "weekStartDate"
+                                  },
+                                  "date"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "component",
+                        "as": "Progress",
+                        "bind": {
+                          "value": {
+                            "def": "weekDone"
+                          },
+                          "max": {
+                            "def": "weekTarget"
+                          }
+                        }
+                      },
+                      {
+                        "type": "component",
+                        "as": "Text",
+                        "props": {
+                          "size": "sm",
+                          "weight": "medium",
+                          "tabular": true
+                        },
+                        "bind": {
+                          "content": {
+                            "cat": [
+                              {
+                                "def": "weekCompletionLabel"
+                              },
+                              " of this week's targets"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "if",
+            "condition": {
+              "def": "hasHabits"
+            },
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "gap": "md"
+                },
+                "children": [
+                  {
+                    "type": "for",
+                    "in": {
+                      "def": "habitStats"
+                    },
+                    "as": "habit",
+                    "key": "id",
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": {
+                              "direction": "row",
+                              "gap": "md",
+                              "align": "center",
+                              "responsive": true
+                            },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": {
+                                  "direction": "row",
+                                  "gap": "md",
+                                  "align": "center",
+                                  "grow": true
+                                },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "Icon",
+                                    "props": {
+                                      "size": "lg"
+                                    },
+                                    "bind": {
+                                      "name": {
+                                        "var": "habit.icon"
+                                      },
+                                      "color": {
+                                        "var": "habit.color"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Stack",
+                                    "props": {
+                                      "gap": "xs",
+                                      "grow": true
+                                    },
+                                    "children": [
+                                      {
+                                        "type": "component",
+                                        "as": "Link",
+                                        "bind": {
+                                          "to": {
+                                            "cat": [
+                                              "/habits/",
+                                              {
+                                                "var": "habit.id"
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "children": [
+                                          {
+                                            "type": "component",
+                                            "as": "Text",
+                                            "props": {
+                                              "weight": "semibold"
+                                            },
+                                            "bind": {
+                                              "content": {
+                                                "var": "habit.name"
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "component",
+                                        "as": "Stack",
+                                        "props": {
+                                          "direction": "row",
+                                          "gap": "sm",
+                                          "align": "center",
+                                          "wrap": true
+                                        },
+                                        "children": [
+                                          {
+                                            "type": "component",
+                                            "as": "Badge",
+                                            "props": {
+                                              "variant": "subtle",
+                                              "size": "sm",
+                                              "icon": "i-lucide-flame"
+                                            },
+                                            "bind": {
+                                              "label": {
+                                                "cat": [
+                                                  {
+                                                    "var": "habit.currentStreak"
+                                                  },
+                                                  " day streak"
+                                                ]
+                                              },
+                                              "color": {
+                                                "if": [
+                                                  {
+                                                    ">": [
+                                                      {
+                                                        "var": "habit.currentStreak"
+                                                      },
+                                                      0
+                                                    ]
+                                                  },
+                                                  {
+                                                    "var": "habit.color"
+                                                  },
+                                                  "neutral"
+                                                ]
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "type": "component",
+                                            "as": "Text",
+                                            "props": {
+                                              "size": "xs",
+                                              "color": "muted"
+                                            },
+                                            "bind": {
+                                              "content": {
+                                                "cat": [
+                                                  {
+                                                    "var": "habit.weekDone"
+                                                  },
+                                                  " of ",
+                                                  {
+                                                    "var": "habit.target"
+                                                  },
+                                                  " this week"
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": {
+                                  "direction": "row",
+                                  "gap": "xs",
+                                  "align": "center"
+                                },
+                                "children": [
+                                  {
+                                    "type": "for",
+                                    "in": {
+                                      "var": "habit.last7"
+                                    },
+                                    "as": "day",
+                                    "key": "date",
+                                    "children": [
+                                      {
+                                        "type": "component",
+                                        "as": "Button",
+                                        "props": {
+                                          "size": "xs"
+                                        },
+                                        "bind": {
+                                          "label": {
+                                            "var": "day.weekdayName"
+                                          },
+                                          "color": {
+                                            "if": [
+                                              {
+                                                "var": "day.done"
+                                              },
+                                              {
+                                                "var": "habit.color"
+                                              },
+                                              "neutral"
+                                            ]
+                                          },
+                                          "variant": {
+                                            "if": [
+                                              {
+                                                "var": "day.isToday"
+                                              },
+                                              "outline",
+                                              "soft"
+                                            ]
+                                          },
+                                          "icon": {
+                                            "if": [
+                                              {
+                                                "var": "day.done"
+                                              },
+                                              "i-lucide-check",
+                                              "i-lucide-circle"
+                                            ]
+                                          },
+                                          "aria-label": {
+                                            "var": "day.date"
+                                          }
+                                        },
+                                        "on": {
+                                          "click": {
+                                            "type": "action",
+                                            "name": "toggle-mark",
+                                            "with": {
+                                              "habitId": {
+                                                "var": "habit.id"
+                                              },
+                                              "date": {
+                                                "var": "day.date"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "component",
+                                "as": "Button",
+                                "props": {
+                                  "size": "md"
+                                },
+                                "bind": {
+                                  "label": {
+                                    "if": [
+                                      {
+                                        "var": "habit.doneToday"
+                                      },
+                                      "Done",
+                                      "Mark"
+                                    ]
+                                  },
+                                  "color": {
+                                    "if": [
+                                      {
+                                        "var": "habit.doneToday"
+                                      },
+                                      {
+                                        "var": "habit.color"
+                                      },
+                                      "neutral"
+                                    ]
+                                  },
+                                  "variant": {
+                                    "if": [
+                                      {
+                                        "var": "habit.doneToday"
+                                      },
+                                      "solid",
+                                      "outline"
+                                    ]
+                                  },
+                                  "icon": {
+                                    "if": [
+                                      {
+                                        "var": "habit.doneToday"
+                                      },
+                                      "i-lucide-check",
+                                      "i-lucide-plus"
+                                    ]
+                                  }
+                                },
+                                "on": {
+                                  "click": {
+                                    "type": "action",
+                                    "name": "toggle-mark",
+                                    "with": {
+                                      "habitId": {
+                                        "var": "habit.id"
+                                      },
+                                      "date": {
+                                        "def": "today"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "else": [
+              {
+                "type": "component",
+                "as": "Empty",
+                "props": {
+                  "icon": "i-lucide-sprout",
+                  "title": "No habits yet",
+                  "description": "Add one small thing you want to do every day."
+                },
+                "slots": {
+                  "actions": [
+                    {
+                      "type": "component",
+                      "as": "Button",
+                      "props": {
+                        "label": "Add your first habit",
+                        "to": "/new",
+                        "icon": "i-lucide-plus"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "page:habit": {
+        "route": "/habits/:id",
+        "title": "Habit",
+        "enter": [
+          {
+            "type": "if",
+            "condition": {
+              "def": "habitExists"
+            },
+            "then": [
+              {
+                "type": "set",
+                "path": "ui.edit",
+                "value": {
+                  "obj": {
+                    "name": {
+                      "get": [
+                        {
+                          "def": "habit"
+                        },
+                        "name"
+                      ]
+                    },
+                    "target": {
+                      "get": [
+                        {
+                          "def": "habit"
+                        },
+                        "target"
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "else": [
+              {
+                "type": "navigate",
+                "to": "/"
+              }
+            ]
+          }
+        ],
+        "children": [
+          {
+            "type": "if",
+            "condition": {
+              "def": "habitExists"
+            },
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "direction": "row",
+                  "justify": "between",
+                  "align": "center"
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "direction": "row",
+                      "gap": "md",
+                      "align": "center"
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Icon",
+                        "props": {
+                          "size": "xl"
+                        },
+                        "bind": {
+                          "name": {
+                            "get": [
+                              {
+                                "def": "habit"
+                              },
+                              "icon"
+                            ]
+                          },
+                          "color": {
+                            "get": [
+                              {
+                                "def": "habit"
+                              },
+                              "color"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "component",
+                        "as": "Heading",
+                        "props": {
+                          "level": 1
+                        },
+                        "bind": {
+                          "content": {
+                            "get": [
+                              {
+                                "def": "habit"
+                              },
+                              "name"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Button",
+                    "props": {
+                      "label": "Back",
+                      "icon": "i-lucide-arrow-left",
+                      "to": "/",
+                      "variant": "ghost",
+                      "color": "neutral",
+                      "size": "sm"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "component",
+                "as": "Grid",
+                "props": {
+                  "cols": 4,
+                  "gap": "md"
+                },
+                "children": [
+                  {
+                    "type": "template",
+                    "name": "component:stat",
+                    "with": {
+                      "label": "Current streak",
+                      "value": {
+                        "cat": [
+                          {
+                            "get": [
+                              {
+                                "def": "habitStat"
+                              },
+                              "currentStreak"
+                            ]
+                          }
+                        ]
+                      },
+                      "unit": "days"
+                    }
+                  },
+                  {
+                    "type": "template",
+                    "name": "component:stat",
+                    "with": {
+                      "label": "Best streak",
+                      "value": {
+                        "cat": [
+                          {
+                            "get": [
+                              {
+                                "def": "habitStat"
+                              },
+                              "bestStreak"
+                            ]
+                          }
+                        ]
+                      },
+                      "unit": {
+                        "cat": [
+                          "days in ",
+                          {
+                            "resource": [
+                              "settings",
+                              "daysBack"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "template",
+                    "name": "component:stat",
+                    "with": {
+                      "label": "Completion",
+                      "value": {
+                        "format": [
+                          {
+                            "/": [
+                              {
+                                "get": [
+                                  {
+                                    "def": "habitStat"
+                                  },
+                                  "rateBp"
+                                ]
+                              },
+                              10000
+                            ]
+                          },
+                          "percent"
+                        ]
+                      },
+                      "unit": {
+                        "cat": [
+                          "last ",
+                          {
+                            "resource": [
+                              "settings",
+                              "daysBack"
+                            ]
+                          },
+                          " days"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "template",
+                    "name": "component:stat",
+                    "with": {
+                      "label": "This week",
+                      "value": {
+                        "cat": [
+                          {
+                            "get": [
+                              {
+                                "def": "habitStat"
+                              },
+                              "weekDone"
+                            ]
+                          },
+                          " / ",
+                          {
+                            "get": [
+                              {
+                                "def": "habit"
+                              },
+                              "target"
+                            ]
+                          }
+                        ]
+                      },
+                      "unit": {
+                        "if": [
+                          {
+                            "get": [
+                              {
+                                "def": "habitStat"
+                              },
+                              "weekTargetMet"
+                            ]
+                          },
+                          "target met",
+                          "in progress"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "gap": "sm"
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Heading",
+                    "props": {
+                      "level": 2
+                    },
+                    "bind": {
+                      "content": {
+                        "def": "monthTitle"
+                      }
+                    }
+                  },
+                  {
+                    "type": "component",
+                    "as": "Grid",
+                    "props": {
+                      "cols": 7,
+                      "gap": "xs"
+                    },
+                    "children": [
+                      {
+                        "type": "for",
+                        "in": {
+                          "def": "weekdayHeaders"
+                        },
+                        "as": "name",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Text",
+                            "props": {
+                              "size": "xs",
+                              "color": "muted",
+                              "align": "center",
+                              "weight": "medium"
+                            },
+                            "bind": {
+                              "content": {
+                                "var": "name"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "for",
+                        "in": {
+                          "def": "monthGrid"
+                        },
+                        "as": "cell",
+                        "key": "date",
+                        "children": [
+                          {
+                            "type": "if",
+                            "condition": {
+                              "var": "cell.inMonth"
+                            },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Button",
+                                "props": {
+                                  "size": "sm",
+                                  "variant": "soft",
+                                  "block": true
+                                },
+                                "bind": {
+                                  "label": {
+                                    "cat": [
+                                      {
+                                        "var": "cell.d"
+                                      }
+                                    ]
+                                  },
+                                  "color": {
+                                    "if": [
+                                      {
+                                        "var": "cell.done"
+                                      },
+                                      {
+                                        "get": [
+                                          {
+                                            "def": "habit"
+                                          },
+                                          "color"
+                                        ]
+                                      },
+                                      {
+                                        "if": [
+                                          {
+                                            "var": "cell.isToday"
+                                          },
+                                          "primary",
+                                          "neutral"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "variant": {
+                                    "if": [
+                                      {
+                                        "var": "cell.done"
+                                      },
+                                      "solid",
+                                      {
+                                        "if": [
+                                          {
+                                            "var": "cell.isToday"
+                                          },
+                                          "outline",
+                                          "soft"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "disabled": {
+                                    "var": "cell.isFuture"
+                                  }
+                                },
+                                "on": {
+                                  "click": {
+                                    "type": "action",
+                                    "name": "toggle-mark",
+                                    "with": {
+                                      "habitId": {
+                                        "context": "params.id"
+                                      },
+                                      "date": {
+                                        "var": "cell.date"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "else": [
+                              {
+                                "type": "component",
+                                "as": "Spacer"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Text",
+                    "props": {
+                      "size": "xs",
+                      "color": "dimmed"
+                    },
+                    "content": "Tap a day to mark or unmark it. Future days are locked."
+                  }
+                ]
+              },
+              {
+                "type": "component",
+                "as": "Group",
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "gap": "sm"
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Heading",
+                        "props": {
+                          "level": 3
+                        },
+                        "content": "Edit"
+                      },
+                      {
+                        "type": "component",
+                        "as": "Form",
+                        "props": {
+                          "state": "ui.edit",
+                          "schema": "habit-edit"
+                        },
+                        "on": {
+                          "submit": "save-habit"
+                        },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": {
+                              "direction": "row",
+                              "gap": "md",
+                              "responsive": true,
+                              "align": "end"
+                            },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": {
+                                  "label": "Name",
+                                  "name": "name"
+                                },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "Input",
+                                    "model": "ui.edit.name"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": {
+                                  "label": "Days per week",
+                                  "name": "target"
+                                },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "NumberInput",
+                                    "props": {
+                                      "min": 1,
+                                      "max": 7
+                                    },
+                                    "model": "ui.edit.target"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": {
+                              "direction": "row",
+                              "gap": "sm",
+                              "justify": "between",
+                              "paddingY": "sm"
+                            },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Button",
+                                "props": {
+                                  "label": "Save",
+                                  "type": "submit",
+                                  "icon": "i-lucide-save"
+                                },
+                                "bind": {
+                                  "disabled": {
+                                    "!": [
+                                      {
+                                        "def": "editIsDirty"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "type": "component",
+                                "as": "Button",
+                                "props": {
+                                  "label": "Delete habit",
+                                  "color": "error",
+                                  "variant": "ghost",
+                                  "icon": "i-lucide-trash-2"
+                                },
+                                "on": {
+                                  "click": "delete-habit"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "page:new": {
+        "route": "/new",
+        "title": "New habit",
+        "enter": [
+          {
+            "type": "if",
+            "condition": {
+              "!": [
+                {
+                  "def": "canAddHabit"
+                }
+              ]
+            },
+            "then": [
+              {
+                "type": "toast",
+                "title": "Habit limit reached",
+                "description": {
+                  "cat": [
+                    "Keep it to ",
+                    {
+                      "resource": [
+                        "settings",
+                        "maxHabits"
+                      ]
+                    },
+                    " habits; remove one first."
+                  ]
+                },
+                "color": "warning"
+              },
+              {
+                "type": "navigate",
+                "to": "/"
+              }
+            ]
+          }
+        ],
+        "children": [
+          {
+            "type": "component",
+            "as": "Heading",
+            "props": {
+              "level": 1
+            },
+            "content": "New habit"
+          },
+          {
+            "type": "component",
+            "as": "Text",
+            "props": {
+              "color": "muted"
+            },
+            "content": "Small and daily beats big and rare."
+          },
+          {
+            "type": "component",
+            "as": "Form",
+            "props": {
+              "state": "ui.draft",
+              "schema": "habit"
+            },
+            "on": {
+              "submit": "add-habit"
+            },
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "gap": "md"
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Field",
+                    "props": {
+                      "label": "Name",
+                      "name": "name",
+                      "required": true
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Input",
+                        "props": {
+                          "placeholder": "Read ten pages"
+                        },
+                        "model": "ui.draft.name"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "direction": "row",
+                      "gap": "md",
+                      "responsive": true
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Field",
+                        "props": {
+                          "label": "Icon",
+                          "name": "icon"
+                        },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Select",
+                            "props": {
+                              "valueKey": "value",
+                              "labelKey": "label"
+                            },
+                            "bind": {
+                              "items": {
+                                "resource": "icons"
+                              }
+                            },
+                            "model": "ui.draft.icon"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Field",
+                        "props": {
+                          "label": "Colour",
+                          "name": "color"
+                        },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Select",
+                            "props": {
+                              "valueKey": "value",
+                              "labelKey": "label"
+                            },
+                            "bind": {
+                              "items": {
+                                "resource": "colours"
+                              }
+                            },
+                            "model": "ui.draft.color"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Field",
+                        "props": {
+                          "label": "Days per week",
+                          "name": "target"
+                        },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "NumberInput",
+                            "props": {
+                              "min": 1,
+                              "max": 7
+                            },
+                            "model": "ui.draft.target"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "direction": "row",
+                      "gap": "sm",
+                      "justify": "end"
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Button",
+                        "props": {
+                          "label": "Cancel",
+                          "variant": "ghost",
+                          "color": "neutral",
+                          "to": "/"
+                        }
+                      },
+                      {
+                        "type": "component",
+                        "as": "Button",
+                        "props": {
+                          "label": "Add habit",
+                          "type": "submit",
+                          "icon": "i-lucide-plus"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "page:settings": {
+        "route": "/settings",
+        "title": "Settings",
+        "enter": [
+          {
+            "type": "set",
+            "path": "ui.confirmReset",
+            "value": false
+          }
+        ],
+        "children": [
+          {
+            "type": "component",
+            "as": "Heading",
+            "props": {
+              "level": 1
+            },
+            "content": "Settings"
+          },
+          {
+            "type": "component",
+            "as": "Group",
+            "children": [
+              {
+                "type": "component",
+                "as": "Field",
+                "props": {
+                  "label": "Week starts on",
+                  "name": "weekStart",
+                  "description": "Changes which days count toward this week's targets."
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "RadioGroup",
+                    "props": {
+                      "valueKey": "value",
+                      "labelKey": "label"
+                    },
+                    "bind": {
+                      "items": {
+                        "resource": "week-starts"
+                      }
+                    },
+                    "model": "ui.weekStart"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "component",
+            "as": "Group",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "gap": "sm"
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "gap": "xs"
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Heading",
+                        "props": {
+                          "level": 3
+                        },
+                        "content": "Weekly summary"
+                      },
+                      {
+                        "type": "component",
+                        "as": "Text",
+                        "props": {
+                          "size": "sm",
+                          "color": "muted"
+                        },
+                        "content": "A plain-text recap of this week, rendered from the same data."
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "gap": "none",
+                      "surface": "muted",
+                      "padding": "md"
+                    },
+                    "children": [
+                      {
+                        "type": "for",
+                        "in": {
+                          "def": "summaryLines"
+                        },
+                        "as": "line",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Text",
+                            "props": {
+                              "size": "sm",
+                              "tabular": true
+                            },
+                            "bind": {
+                              "content": {
+                                "var": "line"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "component",
+            "as": "Group",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": {
+                  "direction": "row",
+                  "justify": "between",
+                  "align": "center",
+                  "responsive": true
+                },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": {
+                      "gap": "xs"
+                    },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Heading",
+                        "props": {
+                          "level": 3
+                        },
+                        "content": "Danger zone"
+                      },
+                      {
+                        "type": "component",
+                        "as": "Text",
+                        "props": {
+                          "size": "sm",
+                          "color": "muted"
+                        },
+                        "bind": {
+                          "content": {
+                            "cat": [
+                              {
+                                "def": "habitCount"
+                              },
+                              " habits and ",
+                              {
+                                "length": [
+                                  {
+                                    "state": "marks"
+                                  }
+                                ]
+                              },
+                              " marks are stored in this browser."
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Button",
+                    "props": {
+                      "label": "Reset everything",
+                      "color": "error",
+                      "variant": "outline",
+                      "icon": "i-lucide-trash-2"
+                    },
+                    "on": {
+                      "click": {
+                        "type": "set",
+                        "path": "ui.confirmReset",
+                        "value": true
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "component",
+            "as": "Modal",
+            "props": {
+              "title": "Reset everything?",
+              "description": "Every habit and every mark will be removed. There is no undo."
+            },
+            "model": "ui.confirmReset",
+            "slots": {
+              "footer": [
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": {
+                    "direction": "row",
+                    "gap": "sm",
+                    "justify": "end"
+                  },
+                  "children": [
+                    {
+                      "type": "component",
+                      "as": "Button",
+                      "props": {
+                        "label": "Keep my data",
+                        "variant": "ghost",
+                        "color": "neutral"
+                      },
+                      "on": {
+                        "click": {
+                          "type": "set",
+                          "path": "ui.confirmReset",
+                          "value": false
+                        }
+                      }
+                    },
+                    {
+                      "type": "component",
+                      "as": "Button",
+                      "props": {
+                        "label": "Reset",
+                        "color": "error"
+                      },
+                      "on": {
+                        "click": "reset-all"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "channel:weekly-summary": [
+        {
+          "type": "component",
+          "as": "Heading",
+          "props": {
+            "level": 2
+          },
+          "bind": {
+            "content": {
+              "cat": [
+                "Habits — week of ",
+                {
+                  "format": [
+                    {
+                      "def": "weekStartDate"
+                    },
+                    "date"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "for",
+          "in": {
+            "def": "summaryLines"
+          },
+          "as": "line",
+          "children": [
+            {
+              "type": "component",
+              "as": "Text",
+              "bind": {
+                "content": {
+                  "var": "line"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "component",
+          "as": "Separator"
+        },
+        {
+          "type": "component",
+          "as": "Text",
+          "props": {
+            "weight": "bold"
+          },
+          "bind": {
+            "content": {
+              "cat": [
+                {
+                  "def": "weekCompletionLabel"
+                },
+                " of targets met"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "tests": [
+      {
+        "name": "today is derived from the runtime clock and converted to a day number",
+        "description": "2024-03-15 is 19797 days after 1970-01-01 and a Friday (weekday 5 with Sunday = 0).",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "expect": {
+          "today": "2024-03-15",
+          "todayParts": {
+            "y": 2024,
+            "m": 3,
+            "d": 15
+          },
+          "todayDay": 19797,
+          "todayWeekday": 5,
+          "weekStartDay": 19793,
+          "weekStartDate": "2024-03-11"
+        }
+      },
+      {
+        "name": "the calendar converts day numbers back to dates, including a leap day",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "expect": {
+          "monthGridStartDate": "2024-02-26",
+          "monthGridSize": 42
+        }
+      },
+      {
+        "name": "a streak survives the month boundary and a leap day",
+        "description": "Marks every day from Feb 27 to Mar 15 (a leap day inside): an 18-day streak ending today; 18 of the last 30 days is 6000 bp; 5 marks in the week of Mar 11.",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-02-27"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-28"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-29"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-01"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-02"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-03"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-04"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-05"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-06"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-07"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-08"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-09"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-10"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-13"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-15"
+            }
+          ]
+        },
+        "expect": {
+          "habitStats": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "doneToday": true,
+              "currentStreak": 18,
+              "bestStreak": 18,
+              "windowDone": 18,
+              "rateBp": 6000,
+              "weekDone": 5,
+              "weekTargetMet": true,
+              "last7": [
+                {
+                  "date": "2024-03-09",
+                  "weekday": 6,
+                  "weekdayName": "Sat",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-10",
+                  "weekday": 0,
+                  "weekdayName": "Sun",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-11",
+                  "weekday": 1,
+                  "weekdayName": "Mon",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-12",
+                  "weekday": 2,
+                  "weekdayName": "Tue",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-13",
+                  "weekday": 3,
+                  "weekdayName": "Wed",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-14",
+                  "weekday": 4,
+                  "weekdayName": "Thu",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-15",
+                  "weekday": 5,
+                  "weekdayName": "Fri",
+                  "isToday": true,
+                  "done": true
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "a streak broken yesterday is zero; the best streak is remembered",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-10"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-15"
+            }
+          ]
+        },
+        "expect": {
+          "habitStats": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "doneToday": true,
+              "currentStreak": 1,
+              "bestStreak": 3,
+              "windowDone": 4,
+              "rateBp": 1333,
+              "weekDone": 3,
+              "weekTargetMet": false,
+              "last7": [
+                {
+                  "date": "2024-03-09",
+                  "weekday": 6,
+                  "weekdayName": "Sat",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-10",
+                  "weekday": 0,
+                  "weekdayName": "Sun",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-11",
+                  "weekday": 1,
+                  "weekdayName": "Mon",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-12",
+                  "weekday": 2,
+                  "weekdayName": "Tue",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-13",
+                  "weekday": 3,
+                  "weekdayName": "Wed",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-14",
+                  "weekday": 4,
+                  "weekdayName": "Thu",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-15",
+                  "weekday": 5,
+                  "weekdayName": "Fri",
+                  "isToday": true,
+                  "done": true
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "today unmarked keeps yesterday's streak alive",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-13"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            }
+          ]
+        },
+        "expect": {
+          "habitStats": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "doneToday": false,
+              "currentStreak": 3,
+              "bestStreak": 3,
+              "windowDone": 3,
+              "rateBp": 1000,
+              "weekDone": 3,
+              "weekTargetMet": false,
+              "last7": [
+                {
+                  "date": "2024-03-09",
+                  "weekday": 6,
+                  "weekdayName": "Sat",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-10",
+                  "weekday": 0,
+                  "weekdayName": "Sun",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-11",
+                  "weekday": 1,
+                  "weekdayName": "Mon",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-12",
+                  "weekday": 2,
+                  "weekdayName": "Tue",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-13",
+                  "weekday": 3,
+                  "weekdayName": "Wed",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-14",
+                  "weekday": 4,
+                  "weekdayName": "Thu",
+                  "isToday": false,
+                  "done": true
+                },
+                {
+                  "date": "2024-03-15",
+                  "weekday": 5,
+                  "weekdayName": "Fri",
+                  "isToday": true,
+                  "done": false
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "marks older than the window do not count for streaks or rates",
+        "description": "daysBack is 30: 2024-02-15 is the first day that counts; Feb 10 to Feb 14 are outside.",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-02-10"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-11"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-13"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-14"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-15"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-02-16"
+            }
+          ]
+        },
+        "expect": {
+          "windowDates": [
+            "2024-02-15",
+            "2024-02-16",
+            "2024-02-17",
+            "2024-02-18",
+            "2024-02-19",
+            "2024-02-20",
+            "2024-02-21",
+            "2024-02-22",
+            "2024-02-23",
+            "2024-02-24",
+            "2024-02-25",
+            "2024-02-26",
+            "2024-02-27",
+            "2024-02-28",
+            "2024-02-29",
+            "2024-03-01",
+            "2024-03-02",
+            "2024-03-03",
+            "2024-03-04",
+            "2024-03-05",
+            "2024-03-06",
+            "2024-03-07",
+            "2024-03-08",
+            "2024-03-09",
+            "2024-03-10",
+            "2024-03-11",
+            "2024-03-12",
+            "2024-03-13",
+            "2024-03-14",
+            "2024-03-15"
+          ],
+          "habitStats": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "doneToday": false,
+              "currentStreak": 0,
+              "bestStreak": 2,
+              "windowDone": 2,
+              "rateBp": 667,
+              "weekDone": 0,
+              "weekTargetMet": false,
+              "last7": [
+                {
+                  "date": "2024-03-09",
+                  "weekday": 6,
+                  "weekdayName": "Sat",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-10",
+                  "weekday": 0,
+                  "weekdayName": "Sun",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-11",
+                  "weekday": 1,
+                  "weekdayName": "Mon",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-12",
+                  "weekday": 2,
+                  "weekdayName": "Tue",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-13",
+                  "weekday": 3,
+                  "weekdayName": "Wed",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-14",
+                  "weekday": 4,
+                  "weekdayName": "Thu",
+                  "isToday": false,
+                  "done": false
+                },
+                {
+                  "date": "2024-03-15",
+                  "weekday": 5,
+                  "weekdayName": "Fri",
+                  "isToday": true,
+                  "done": false
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "week completion depends on the week start: Monday",
+        "description": "Sunday 2024-03-17. With Monday as week start the week is Mar 11 to 17; Read has 4 of 5, Walk 3 of 3 (a fourth mark does not count): 7 of 8 = 87.5% → 8750 bp.",
+        "context": {
+          "now": "2024-03-17T20:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            },
+            {
+              "id": "h2",
+              "name": "Walk",
+              "icon": "i-lucide-footprints",
+              "color": "success",
+              "target": 3,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "ui": {
+            "weekStart": "monday"
+          },
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-17"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-13"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-15"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-16"
+            }
+          ]
+        },
+        "expect": {
+          "todayWeekday": 0,
+          "weekStartDate": "2024-03-11",
+          "weekDone": 7,
+          "weekTarget": 8,
+          "weekCompletionBp": 8750,
+          "weekCompletionLabel": "88%",
+          "weekdayHeaders": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sun"
+          ]
+        }
+      },
+      {
+        "name": "week completion depends on the week start: Sunday",
+        "description": "Same marks, same Sunday; with Sunday as week start the week is only Mar 17: Read 1 of 5, Walk 0 of 3.",
+        "context": {
+          "now": "2024-03-17T20:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            },
+            {
+              "id": "h2",
+              "name": "Walk",
+              "icon": "i-lucide-footprints",
+              "color": "success",
+              "target": 3,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "ui": {
+            "weekStart": "sunday"
+          },
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-17"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-13"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-15"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-16"
+            }
+          ]
+        },
+        "expect": {
+          "weekStartDate": "2024-03-17",
+          "weekDone": 1,
+          "weekTarget": 8,
+          "weekCompletionBp": 1250,
+          "monthGridStartDate": "2024-02-25",
+          "weekdayHeaders": [
+            "Sun",
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat"
+          ],
+          "summaryLines": [
+            "Read: 1/5",
+            "Walk: 0/3"
+          ]
+        }
+      },
+      {
+        "name": "no habits means zero completion, never a division by zero",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "expect": {
+          "weekDone": 0,
+          "weekTarget": 0,
+          "weekCompletionBp": 0,
+          "hasHabits": false,
+          "canAddHabit": true
+        }
+      },
+      {
+        "name": "the month grid starts on the week start before the first of the month",
+        "description": "Tree test: March 2024 starts on a Friday; with Monday as week start the grid opens on Feb 26 and those cells are blank spacers. The heading names the month.",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z",
+          "params": {
+            "id": "h1"
+          }
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-15"
+            }
+          ]
+        },
+        "render": {
+          "template": "page:habit",
+          "params": {
+            "id": "h1"
+          }
+        },
+        "contains": [
+          {
+            "as": "Heading",
+            "text": "March 2024"
+          },
+          {
+            "as": "Heading",
+            "text": "Read"
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "15",
+              "variant": "solid",
+              "color": "primary"
+            }
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "1",
+              "variant": "soft"
+            }
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "16",
+              "disabled": true
+            }
+          },
+          {
+            "as": "Text",
+            "text": "Mon"
+          }
+        ]
+      },
+      {
+        "name": "the index page lists habits with their streaks and the week bar",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            },
+            {
+              "id": "h2",
+              "name": "Walk",
+              "icon": "i-lucide-footprints",
+              "color": "success",
+              "target": 3,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-15"
+            }
+          ]
+        },
+        "render": "page:index",
+        "contains": [
+          {
+            "as": "Heading",
+            "text": "Today"
+          },
+          {
+            "as": "Badge",
+            "props": {
+              "label": "2 day streak",
+              "color": "primary"
+            }
+          },
+          {
+            "as": "Badge",
+            "props": {
+              "label": "0 day streak",
+              "color": "neutral"
+            }
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "Done",
+              "color": "primary"
+            }
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "Mark",
+              "color": "neutral"
+            }
+          },
+          {
+            "as": "Progress",
+            "props": {
+              "value": 2,
+              "max": 8
+            }
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "Fri",
+              "variant": "outline",
+              "icon": "i-lucide-check"
+            }
+          },
+          {
+            "as": "Button",
+            "props": {
+              "label": "Sat",
+              "variant": "soft",
+              "icon": "i-lucide-circle"
+            }
+          }
+        ]
+      },
+      {
+        "name": "the weekly summary channel renders one line per habit",
+        "context": {
+          "now": "2024-03-17T20:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            },
+            {
+              "id": "h2",
+              "name": "Walk",
+              "icon": "i-lucide-footprints",
+              "color": "success",
+              "target": 3,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-12"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            },
+            {
+              "habitId": "h1",
+              "date": "2024-03-17"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-11"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-13"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-15"
+            }
+          ]
+        },
+        "render": "channel:weekly-summary",
+        "contains": [
+          {
+            "as": "Text",
+            "text": "Read: 4/5"
+          },
+          {
+            "as": "Text",
+            "text": "Walk: 3/3 ✓"
+          },
+          {
+            "as": "Text",
+            "text": "88% of targets met"
+          }
+        ]
+      },
+      {
+        "name": "toggling a mark twice leaves no mark; a future date is ignored",
+        "description": "Action scenario: transforms only. The third call targets tomorrow and must not add a mark.",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            }
+          ]
+        },
+        "run": [
+          {
+            "type": "action",
+            "name": "toggle-mark",
+            "with": {
+              "habitId": "h1",
+              "date": "2024-03-15"
+            }
+          },
+          {
+            "type": "action",
+            "name": "toggle-mark",
+            "with": {
+              "habitId": "h1",
+              "date": "2024-03-15"
+            }
+          },
+          {
+            "type": "action",
+            "name": "toggle-mark",
+            "with": {
+              "habitId": "h1",
+              "date": "2024-03-16"
+            }
+          }
+        ],
+        "after": {
+          "state": {
+            "marks": []
+          },
+          "effects": []
+        }
+      },
+      {
+        "name": "adding a habit assigns a sequential id, resets the draft, toasts and navigates",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "ui": {
+            "draft": {
+              "name": "  Read  ",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5
+            }
+          }
+        },
+        "run": "add-habit",
+        "stubs": {
+          "ui.toast": [
+            {
+              "result": {
+                "ok": true
+              }
+            }
+          ],
+          "web.router": [
+            {
+              "match": {
+                "type": "navigate",
+                "to": "/"
+              },
+              "result": {
+                "ok": true
+              }
+            }
+          ]
+        },
+        "after": {
+          "state": {
+            "habits": [
+              {
+                "id": "h1",
+                "name": "  Read  ",
+                "icon": "i-lucide-book-open",
+                "color": "primary",
+                "target": 5,
+                "createdOn": "2024-03-15"
+              }
+            ],
+            "nextId": 2,
+            "ui": {
+              "draft": {
+                "name": "",
+                "target": 7
+              }
+            }
+          },
+          "effects": [
+            {
+              "capability": "ui.toast",
+              "type": "toast"
+            },
+            {
+              "capability": "web.router",
+              "type": "navigate"
+            }
+          ]
+        }
+      },
+      {
+        "name": "an invalid draft is refused with the schema's message",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z"
+        },
+        "state": {
+          "ui": {
+            "draft": {
+              "name": "",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 9
+            }
+          }
+        },
+        "run": "add-habit",
+        "stubs": {
+          "ui.toast": [
+            {
+              "result": {
+                "ok": true
+              }
+            }
+          ]
+        },
+        "error": "VALIDATION_FAILED",
+        "after": {
+          "state": {
+            "habits": [],
+            "nextId": 1
+          },
+          "effects": [
+            {
+              "capability": "ui.toast",
+              "type": "toast",
+              "description": "Give the habit a name (up to 40 characters). Target is between 1 and 7 days per week."
+            }
+          ]
+        }
+      },
+      {
+        "name": "deleting a habit removes its marks and navigates home",
+        "context": {
+          "now": "2024-03-15T10:00:00.000Z",
+          "params": {
+            "id": "h1"
+          }
+        },
+        "state": {
+          "habits": [
+            {
+              "id": "h1",
+              "name": "Read",
+              "icon": "i-lucide-book-open",
+              "color": "primary",
+              "target": 5,
+              "createdOn": "2024-02-01"
+            },
+            {
+              "id": "h2",
+              "name": "Walk",
+              "icon": "i-lucide-footprints",
+              "color": "success",
+              "target": 3,
+              "createdOn": "2024-02-01"
+            }
+          ],
+          "marks": [
+            {
+              "habitId": "h1",
+              "date": "2024-03-14"
+            },
+            {
+              "habitId": "h2",
+              "date": "2024-03-14"
+            }
+          ]
+        },
+        "run": "delete-habit",
+        "stubs": {
+          "ui.toast": [
+            {
+              "result": {
+                "ok": true
+              }
+            }
+          ],
+          "web.router": [
+            {
+              "match": {
+                "type": "navigate"
+              },
+              "result": {
+                "ok": true
+              }
+            }
+          ]
+        },
+        "after": {
+          "state": {
+            "habits": [
+              {
+                "id": "h2",
+                "name": "Walk",
+                "icon": "i-lucide-footprints",
+                "color": "success",
+                "target": 3,
+                "createdOn": "2024-02-01"
+              }
+            ],
+            "marks": [
+              {
+                "habitId": "h2",
+                "date": "2024-03-14"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -19,6 +19,7 @@ import type { Evaluator } from './logic'
 import { truthy } from './logic'
 import { BlueprintError } from './errors'
 import { getPath, isPlainObject } from './path'
+import { vocabularyOf } from './registry'
 
 export interface AbstractEventHandler {
   actions: BlueprintActions
@@ -27,7 +28,8 @@ export interface AbstractEventHandler {
 }
 
 export interface AbstractNode {
-  kind: 'component' | 'html' | 'text'
+  /** `unavailable`: a component this runtime cannot draw and that has no fallback (ADR 0026). */
+  kind: 'component' | 'html' | 'text' | 'unavailable'
   key: string
   as?: string
   props?: Record<string, unknown>
@@ -36,6 +38,12 @@ export interface AbstractNode {
   slots?: Record<string, AbstractNode[]>
   model?: { path: string, prop: string }
   on?: Record<string, AbstractEventHandler>
+  /** Set on nodes produced by a `fallback` in place of `of`. */
+  via?: 'fallback'
+  /** The component the fallback (or the unavailable node) stands for. */
+  of?: string
+  /** The vocabulary capability an unavailable node needed. */
+  capability?: string
 }
 
 export interface EvaluateTemplateOptions {
@@ -43,6 +51,12 @@ export interface EvaluateTemplateOptions {
   outlet?: AbstractNode[]
   /** Guard against runaway template recursion. */
   depth?: number
+  /**
+   * Can this runtime draw the component? When it cannot, the node's
+   * `fallback` is evaluated in its place (`via: "fallback"`), or the tree
+   * carries an `unavailable` node. Absent → everything is drawable.
+   */
+  available?: (component: string) => boolean
 }
 
 const MAX_DEPTH = 32
@@ -139,6 +153,13 @@ function evaluateNode(
 
     case 'component':
     case 'html': {
+      if (node.type === 'component' && options.available && !options.available(node.as)) {
+        if (node.fallback) {
+          return evaluateNodes(evaluator, node.fallback, scope, `${key}~`, { ...options, depth: (options.depth || 0) + 1 })
+            .map(child => ({ ...child, via: 'fallback' as const, of: node.as }))
+        }
+        return [{ kind: 'unavailable', key, as: node.as, of: node.as, capability: vocabularyOf(node.as) }]
+      }
       const props: Record<string, unknown> = { ...(node.props || {}) }
       const { content: boundContent, ...bindings } = node.bind || {}
       for (const [prop, logic] of Object.entries(bindings)) props[prop] = evaluator.eval(logic, scope)

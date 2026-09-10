@@ -22,6 +22,31 @@ export type BlueprintErrorCode
     | 'VALIDATION_FAILED'
     | 'SUBMIT_FAILED'
     | 'TEST_FAILED'
+    | 'ACTION_CYCLE'
+    | 'UNSUPPORTED_SPEC'
+    | 'CAPABILITY_MISSING'
+    | 'CAPABILITY_UNAVAILABLE'
+    | 'CAPABILITY_VERSION'
+    | 'PROJECTION_DANGLING'
+    | 'UNSTUBBED_EFFECT'
+    | 'INVALID_TEST'
+
+/** A failure as a value (ADR 0008): what a handler's `catch` sees. */
+export interface ActionFailure {
+  code: string
+  message: string
+  issues?: unknown
+  status?: number
+}
+
+export function toFailure(error: unknown): ActionFailure {
+  if (error instanceof BlueprintError) {
+    const details = (error.details || {}) as Partial<ActionFailure>
+    return { code: error.code, message: error.message.replace(/^\[blueprint:[A-Z_]+\] /, ''), ...(details.issues !== undefined ? { issues: details.issues } : {}), ...(details.status !== undefined ? { status: details.status } : {}) }
+  }
+  if (error && typeof error === 'object' && typeof (error as ActionFailure).code === 'string') return error as ActionFailure
+  return { code: 'EFFECT_FAILED', message: String((error as Error)?.message || error) }
+}
 
 export class BlueprintError extends Error {
   code: BlueprintErrorCode

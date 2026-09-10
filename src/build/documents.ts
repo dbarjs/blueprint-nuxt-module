@@ -89,7 +89,7 @@ export interface DocumentReport {
   ok: boolean
 }
 
-export function reportDocument(loaded: LoadedDocument, registry: { base: string[], nuxtUi: string[], app: string[] }, runTests: boolean, contract?: RuntimeContract): DocumentReport {
+export async function reportDocument(loaded: LoadedDocument, registry: { base: string[], nuxtUi: string[], app: string[] }, runTests: boolean, contract?: RuntimeContract): Promise<DocumentReport> {
   if (loaded.parseError) {
     return {
       loaded,
@@ -100,7 +100,8 @@ export function reportDocument(loaded: LoadedDocument, registry: { base: string[
   }
   const validation = validateDocument(loaded.document, { registry, contract })
   const hasErrors = validation.issues.some(issue => issue.level === 'error')
-  const tests = runTests && !hasErrors ? runDocumentTests(loaded.document) : []
+  const known = new Set([...registry.base, ...registry.nuxtUi, ...registry.app])
+  const tests = runTests && !hasErrors ? await runDocumentTests(loaded.document, { available: name => known.size === 0 || known.has(name) }) : []
   return { loaded, validation, tests, ok: !hasErrors && tests.every(test => test.passed) }
 }
 
@@ -114,7 +115,7 @@ export function formatReport(report: DocumentReport): string[] {
   for (const issue of errors) lines.push(`  ✖ ${issue.code}${issue.where ? ` @ ${issue.where}` : ''}: ${issue.message}`)
   for (const issue of warnings) lines.push(`  ⚠ ${issue.code}${issue.where ? ` @ ${issue.where}` : ''}: ${issue.message}`)
   for (const test of tests.filter(test => !test.passed)) {
-    lines.push(`  ✖ test "${test.name}" failed${test.error ? `: ${test.error}` : ''}`)
+    lines.push(`  ✖ ${test.form} test "${test.name}" ${test.skipped ? `skipped: ${test.skipped}` : `failed${test.error ? `: ${test.error}` : ''}`}`)
     for (const failure of test.failures) lines.push(`      ${failure.definition}: expected ${JSON.stringify(failure.expected)}, got ${JSON.stringify(failure.actual)}`)
   }
   const { portability } = validation
@@ -122,8 +123,20 @@ export function formatReport(report: DocumentReport): string[] {
   if (portability.base.length) layers.push(`base(${portability.base.length})`)
   if (portability.nuxtUi.length) layers.push(`nuxt-ui(${portability.nuxtUi.length})`)
   if (portability.app.length) layers.push(`app(${portability.app.length})`)
-  const portable = portability.nuxtUi.length === 0 && portability.app.length === 0 && portability.escapes.length === 0
-  lines.push(`  vocabulary: ${layers.join(', ') || 'none'} → ${portable ? 'portable' : 'not portable (uses solution vocabulary)'}`)
+  if (validation.portable && validation.requirements) {
+    // The ADR 0026 line: level, status, and what decides it.
+    const { level, status, locked, degradable } = validation.portable
+    const detail = status === 'LOCKED'
+      ? `${[...new Set(locked.map(entry => entry.component))].join(', ')} without fallback`
+      : status === 'degradable'
+        ? `${[...degradable, ...(portability.escapes.length ? [`${portability.escapes.length} html escapes`] : [])].join(', ')} via fallback`
+        : level === 'L0' ? 'kernel only' : level === 'L1' ? 'vocab.base only' : 'kernel + minimum common runtime'
+    lines.push(`  portability: ${level} ${status} (${detail}) · vocabulary ${layers.join(', ') || 'none'} · requires ${Object.keys(validation.requirements.requires).join(', ') || 'nothing'}${Object.keys(validation.requirements.optional).length ? ` · optional ${Object.keys(validation.requirements.optional).join(', ')}` : ''}`)
+    lines.push(`  ${loaded.document.spec ? `spec ${loaded.document.spec}` : 'spec missing'} · ${validation.compatibility} with this runtime`)
+  }
+  else {
+    lines.push(`  vocabulary: ${layers.join(', ') || 'none'}`)
+  }
   if (validation.endpoints.length) {
     const collections = Object.entries(loaded.document.content.collections || {}).map(([name, collection]) => `${name}${collection.storage ? `(${collection.storage})` : ''}`)
     lines.push(`  runtime: ${validation.endpoints.length} endpoints [${validation.endpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`).join(', ')}]${collections.length ? ` over ${collections.join(', ')}` : ''}${loaded.document.content.runtime?.storage ? ` · storage ${loaded.document.content.runtime.storage}` : ''}`)

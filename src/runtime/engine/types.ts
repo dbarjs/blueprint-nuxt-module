@@ -30,10 +30,15 @@ export interface BlueprintMeta {
   seo?: Record<string, string>
 }
 
+/** Where a section entry may travel (ADR 0015): `public` (default) or a surface name. */
+export type Audience = 'public' | 'client' | 'server' | 'print' | (string & {})
+
 export interface BlueprintResource<T = unknown> {
   type: string
   name?: string
   description?: string
+  /** Surfaces allowed to receive this entry. Defaults to `public`. */
+  audience?: Audience
   data: T
   /** Hit policy for parameter tables (`type: "parameter-table"`). */
   hitPolicy?: 'first' | 'unique' | 'collect' | 'last'
@@ -44,9 +49,21 @@ export interface BlueprintResource<T = unknown> {
 
 export interface BlueprintDefinition {
   type?: 'number' | 'string' | 'boolean' | 'array' | 'object' | 'any'
+  /** @deprecated documentation only ("helper, not a public output"); `audience` decides where an entry travels. */
   visibility?: 'public' | 'private'
+  /** Surfaces allowed to receive this entry. Defaults to `public`. */
+  audience?: Audience
   description?: string
   logic: Logic
+}
+
+/**
+ * Every capability call may say where its value goes (ADR 0008): `as` binds a
+ * variable for the rest of the sequence, `result` writes a state path.
+ */
+export interface ResultTarget {
+  as?: string
+  result?: string
 }
 
 /** Closed set of actions the engine knows how to run. */
@@ -61,8 +78,8 @@ export type BlueprintAction
     | { type: 'toast', title: Logic, description?: Logic, color?: string, icon?: string }
     | { type: 'if', condition: Logic, then?: BlueprintActions, else?: BlueprintActions }
     | { type: 'validate', schema: string, path?: string, then?: BlueprintActions, else?: BlueprintActions }
-    | { type: 'submit', schema?: string, path?: string, endpoint?: string, params?: Record<string, Logic>, query?: Record<string, Logic>, body?: Logic, result?: string, then?: BlueprintActions, catch?: BlueprintActions }
-    | { type: 'fetch', endpoint: string, params?: Record<string, Logic>, query?: Record<string, Logic>, body?: Logic, result?: string, then?: BlueprintActions, catch?: BlueprintActions }
+    | ({ type: 'submit', schema?: string, path?: string, endpoint?: string, params?: Record<string, Logic>, query?: Record<string, Logic>, body?: Logic, then?: BlueprintActions, catch?: BlueprintActions } & ResultTarget)
+    | ({ type: 'fetch', endpoint: string, params?: Record<string, Logic>, query?: Record<string, Logic>, body?: Logic, then?: BlueprintActions, catch?: BlueprintActions } & ResultTarget)
     | { type: 'action', name: string, with?: Record<string, Logic> }
     | { type: 'sequence', steps: BlueprintActions }
     | { type: 'log', value: Logic }
@@ -75,12 +92,12 @@ export type BlueprintAction
  * result as a variable (`as`) for the following steps.
  */
 export type ServerAction
-  = | { type: 'insert', collection: string, data: Logic, as?: string }
-    | { type: 'find', collection: string, where?: Logic, sort?: SortSpec, limit?: Logic, offset?: Logic, as?: string }
-    | { type: 'findOne', collection: string, id?: Logic, where?: Logic, as?: string }
-    | { type: 'count', collection: string, where?: Logic, as?: string }
-    | { type: 'patch', collection: string, id?: Logic, where?: Logic, set: Record<string, Logic>, as?: string }
-    | { type: 'delete', collection: string, id?: Logic, where?: Logic, as?: string }
+  = | ({ type: 'insert', collection: string, data: Logic } & ResultTarget)
+    | ({ type: 'find', collection: string, where?: Logic, sort?: SortSpec, limit?: Logic, offset?: Logic } & ResultTarget)
+    | ({ type: 'findOne', collection: string, id?: Logic, where?: Logic } & ResultTarget)
+    | ({ type: 'count', collection: string, where?: Logic } & ResultTarget)
+    | ({ type: 'patch', collection: string, id?: Logic, where?: Logic, set: Record<string, Logic> } & ResultTarget)
+    | ({ type: 'delete', collection: string, id?: Logic, where?: Logic } & ResultTarget)
     | { type: 'respond', status?: number, body?: Logic, headers?: Record<string, string> }
     | { type: 'fail', status?: number, message?: Logic, issues?: Logic }
 
@@ -91,7 +108,10 @@ export type SortSpec = Record<string, 'asc' | 'desc'> | Array<[string, 'asc' | '
 export const SERVER_ACTION_TYPES = ['insert', 'find', 'findOne', 'count', 'patch', 'delete', 'respond', 'fail'] as const
 /** Action types that only make sense in the browser (need a router / a screen). */
 export const CLIENT_ACTION_TYPES = ['navigate', 'toast', 'fetch', 'submit'] as const
-/** Action types both sides share. */
+/**
+ * Transforms (ADR 0008): pure over `state` and `vars`, owned by the kernel,
+ * legal on every surface. Everything else is a capability call.
+ */
 export const SHARED_ACTION_TYPES = ['set', 'push', 'remove', 'update', 'increment', 'reset', 'if', 'validate', 'action', 'sequence', 'log'] as const
 export const ACTION_TYPES = [...SHARED_ACTION_TYPES, ...CLIENT_ACTION_TYPES, ...SERVER_ACTION_TYPES] as const
 
@@ -127,6 +147,12 @@ export interface ComponentNode extends NodeBase {
   model?: string | { path: string, prop?: string }
   /** Component events mapped to actions. */
   on?: Record<string, BlueprintActions>
+  /**
+   * Rendered in place of this node by a runtime that lacks the component's
+   * vocabulary (ADR 0026). Written in the base vocabulary; sees the same
+   * scope. A non-base component without a fallback locks the document.
+   */
+  fallback?: TemplateNode[]
 }
 
 export interface HtmlNode extends NodeBase {
@@ -193,19 +219,89 @@ export interface PageTemplate {
 
 export type BlueprintTemplate = TemplateNode[] | PageTemplate
 
-export interface BlueprintTest {
+interface TestBase {
   name: string
+  description?: string
   /** State used for the evaluation (merged over the document's initial state). */
   state?: Record<string, unknown>
   context?: Record<string, unknown>
-  /** Expected definition values, compared with deep equality. */
+  /** For negative tests: the error code the run must end with. */
+  error?: string
+}
+
+/** Definition test: state in, definition values out (exact). */
+export interface DefinitionTest extends TestBase {
   expect: Record<string, unknown>
 }
 
-/** What the document asks of the runtime hosting it. */
+/** Tree test: evaluate a template and compare the abstract tree. */
+export interface TreeTest extends TestBase {
+  render: string | { template: string, with?: Record<string, Logic>, params?: Record<string, unknown> }
+  /** Exact tree (canonical). */
+  tree?: unknown[]
+  /** Nodes that must exist anywhere in the tree (subset on `as`, `text`, `props`). */
+  contains?: Array<{ as?: string, kind?: string, text?: string, props?: Record<string, unknown> }>
+}
+
+/** One stubbed answer to a capability call (ADR 0011). */
+export interface EffectStub {
+  /** Subset of the action object the call must match (`{ "type": "submit" }`). */
+  match?: Record<string, unknown>
+  /** The provider's answer: a value, or a failure. */
+  result: { ok: true, value?: unknown } | { ok: false, error: { code: string, message?: string, issues?: unknown, status?: number } }
+}
+
+export interface ScenarioAfter {
+  /** Deep subset of the state after the run. */
+  state?: Record<string, unknown>
+  /** Effect log (results omitted), compared in order. */
+  effects?: Array<Record<string, unknown>>
+  /** Definition values after the run (exact). */
+  expect?: Record<string, unknown>
+  /** Deep subset of each collection after the run (endpoint scenarios). */
+  collections?: Record<string, unknown[]>
+}
+
+/** Action scenario: run actions against stubbed capabilities. */
+export interface ActionScenario extends TestBase {
+  run: BlueprintActions
+  /** Stubs per capability (`http.client`, `web.router`, `ui.toast`...). */
+  stubs?: Record<string, EffectStub[] | Record<string, unknown[]>>
+  after?: ScenarioAfter
+}
+
+/** Endpoint scenario: a request in, a response out. */
+export interface EndpointScenario extends TestBase {
+  request: { endpoint?: string, method?: string, path?: string, params?: Record<string, unknown>, query?: Record<string, unknown>, body?: unknown }
+  /** `storage.collections` stubs are the seeded records per collection. */
+  stubs?: Record<string, EffectStub[] | Record<string, unknown[]>>
+  response?: { status?: number, body?: unknown }
+  after?: ScenarioAfter
+}
+
+/** The four test forms (ADR 0011), recognised by the keys they carry. */
+export type BlueprintTest = DefinitionTest | TreeTest | ActionScenario | EndpointScenario
+
+/**
+ * What the document asks of the runtime hosting it (ADR 0006, 0007). Most
+ * requirements are derived from `refs()`; authored entries pin a version
+ * range or change criticality. They can never remove a derived requirement.
+ */
 export interface BlueprintRuntimeRequirements {
-  /** Default storage backend for collections (a name from the runtime contract). */
+  /** Critical capabilities: name → semver range (`"^1"`). Absent → the document is refused. */
+  requires?: Record<string, string>
+  /** Optional capabilities: absent → the runtime degrades and reports. */
+  optional?: Record<string, string>
+  /** Default storage backend for collections (an option of `storage.collections`). */
   storage?: string
+}
+
+/** A persisted selection served as a projection (ADR 0015). */
+export interface BlueprintProfile {
+  /** Section entries to keep (`page:index`, `channel:kitchen-ticket`, `definitions.pricing`...). */
+  select: string[]
+  audience: Audience
+  description?: string
 }
 
 /** A named set of records the runtime persists for the app. */
@@ -231,6 +327,13 @@ export interface BlueprintEndpoint {
   handler: BlueprintActions
   /** Refuse requests pinned (`createdUnder`) to another document version. */
   pinned?: boolean
+  /**
+   * Access rule (ADR 0027): a calculation over the request and
+   * `context.actor`, evaluated after input validation and before the
+   * handler. Falsy → 401 when there is no actor, 403 otherwise. Requires
+   * the `identity` capability; a runtime without it refuses the document.
+   */
+  access?: Logic
 }
 
 /** A stored record: the validated data plus the fields the runtime owns. */
@@ -257,14 +360,24 @@ export interface BlueprintContent {
   collections?: Record<string, BlueprintCollection>
   /** HTTP endpoints written in the document, served by the runtime. */
   endpoints?: Record<string, BlueprintEndpoint>
+  /** Persisted selections materialized as projections at publish. */
+  profiles?: Record<string, BlueprintProfile>
 }
+
+/** Kernel spec version this engine implements. Documents outside the range are refused. */
+export const SPEC_VERSION = '0.1'
+export const SPEC_RANGE = '>=0.1 <0.2'
 
 export interface BlueprintDocument {
   $schema?: string
+  /** Kernel version the document is written in (`"0.1"`). Required once accepted; today a warning when absent. */
+  spec?: string
   id?: string
   /** URL prefix of the application. Defaults to the file stem. */
   name: string
   from?: { blueprintId: string, message?: string }
+  /** When the document is a projection of a version (ADR 0015). */
+  projection?: { of: string, select: string[], audience: Audience, profile?: string }
   content: BlueprintContent
 }
 
