@@ -1,0 +1,13 @@
+{
+	"name": "blueprint-nuxt-module", // adc init sets this to the repo directory name
+	"image": "ghcr.io/dbarjs/agent-devcontainer/node:latest",
+	"customizations": {
+		"vscode": {
+			"extensions": [] // project extras; the baseline set comes from image metadata
+		}
+	},
+	"forwardPorts": [3000],
+	// ni only for projects that declare their package manager — without a
+	// lockfile or packageManager field it prompts, which hangs headless creates
+	"postCreateCommand": "if jq -e .packageManager package.json >/dev/null 2>&1; then ni; fi"
+}
