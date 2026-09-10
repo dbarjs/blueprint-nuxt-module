@@ -5,11 +5,12 @@
  * definition cycles, component names against the registry, and reports the
  * vocabulary layers the document uses (portability).
  */
-import type { BlueprintDocument, BlueprintTemplate } from './types'
+import { CLIENT_ACTION_TYPES, SERVER_ACTION_TYPES, type BlueprintDocument, type BlueprintTemplate } from './types'
 import { refsOfDocument, type RefSet } from './refs'
 import { isPageTemplate, routeOf } from './template'
 import { isPlainObject } from './path'
 import { createEvaluator } from './logic'
+import { HTTP_METHODS, RUNTIME_CONTRACT, storageNames, type RuntimeContract } from './contract'
 
 export interface DocumentIssue {
   level: 'error' | 'warning'
@@ -36,12 +37,15 @@ export interface ValidationReport {
   issues: DocumentIssue[]
   portability: PortabilityReport
   pages: Array<{ name: string, route: string }>
+  endpoints: Array<{ name: string, method: string, path: string }>
   refs: Record<string, RefSet>
 }
 
 export interface ValidateDocumentOptions {
   /** Known component names by layer. */
   registry?: { base?: string[], nuxtUi?: string[], app?: string[] }
+  /** Runtime contract the document is validated against (storages, actions). */
+  contract?: RuntimeContract
 }
 
 export function validateDocument(document: BlueprintDocument, options: ValidateDocumentOptions = {}): ValidationReport {
@@ -52,7 +56,7 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
   const name = document.name || '(unnamed)'
   if (!isPlainObject(document)) {
     error('INVALID_DOCUMENT', 'document must be an object')
-    return { name, issues, portability: emptyPortability(), pages: [], refs: {} }
+    return { name, issues, portability: emptyPortability(), pages: [], endpoints: [], refs: {} }
   }
   if (!document.name || !/^[a-z0-9][a-z0-9-]*$/.test(document.name)) {
     error('INVALID_NAME', `document name "${String(document.name)}" must be a lowercase slug (it becomes the URL prefix)`)
@@ -60,7 +64,7 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
   const content = document.content
   if (!isPlainObject(content)) {
     error('INVALID_DOCUMENT', '"content" must be an object')
-    return { name, issues, portability: emptyPortability(), pages: [], refs: {} }
+    return { name, issues, portability: emptyPortability(), pages: [], endpoints: [], refs: {} }
   }
   if (!isPlainObject(content.meta) || !content.meta.title) error('INVALID_META', '"content.meta.title" is required')
   for (const section of ['resources', 'schemas', 'templates'] as const) {
@@ -70,7 +74,7 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     if (content[section] !== undefined && !isPlainObject(content[section])) error('INVALID_SECTION', `"content.${section}" must be an object`, section)
   }
   if (content.tests !== undefined && !Array.isArray(content.tests)) error('INVALID_SECTION', '"content.tests" must be an array', 'tests')
-  if (issues.some(issue => issue.level === 'error')) return { name, issues, portability: emptyPortability(), pages: [], refs: {} }
+  if (issues.some(issue => issue.level === 'error')) return { name, issues, portability: emptyPortability(), pages: [], endpoints: [], refs: {} }
 
   for (const [resourceName, resource] of Object.entries(content.resources)) {
     if (!isPlainObject(resource) || !('data' in resource)) error('INVALID_RESOURCE', `resource "${resourceName}" must be an object with "data"`, `resources.${resourceName}`)
@@ -106,6 +110,43 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
   }
   if (pages.length === 0) warning('NO_PAGES', 'document declares no "page:*" template; the app has nothing to render')
 
+  // ---- runtime sections: storage, collections, endpoints ---------------------
+  const contract = options.contract || RUNTIME_CONTRACT
+  const storages = storageNames(contract)
+  const knownStorage = (storage: unknown, where: string) => {
+    if (storage !== undefined && !storages.includes(String(storage))) {
+      error('UNKNOWN_STORAGE', `storage "${String(storage)}" is not provided by ${contract.runtime} (available: ${storages.join(', ')})`, where)
+    }
+  }
+  knownStorage(content.runtime?.storage, 'runtime.storage')
+  for (const [collectionName, collection] of Object.entries(content.collections || {})) {
+    if (!isPlainObject(collection)) {
+      error('INVALID_COLLECTION', `collection "${collectionName}" must be an object`, `collections.${collectionName}`)
+      continue
+    }
+    if (!/^[a-z][a-z0-9-]*$/.test(collectionName)) error('INVALID_COLLECTION', `collection name "${collectionName}" must be a lowercase slug`, `collections.${collectionName}`)
+    knownStorage(collection.storage, `collections.${collectionName}.storage`)
+  }
+  const endpoints: Array<{ name: string, method: string, path: string }> = []
+  const routesByEndpoint = new Map<string, string>()
+  for (const [endpointName, endpoint] of Object.entries(content.endpoints || {})) {
+    const where = `endpoints.${endpointName}`
+    if (!isPlainObject(endpoint)) {
+      error('INVALID_ENDPOINT', `endpoint "${endpointName}" must be an object`, where)
+      continue
+    }
+    if (!/^[a-z][a-z0-9-]*$/.test(endpointName)) error('INVALID_ENDPOINT', `endpoint name "${endpointName}" must be a lowercase slug`, where)
+    if (!HTTP_METHODS.includes(endpoint.method as typeof HTTP_METHODS[number])) error('INVALID_ENDPOINT', `endpoint "${endpointName}" method must be one of ${HTTP_METHODS.join(', ')}`, where)
+    if (typeof endpoint.path !== 'string' || !endpoint.path.startsWith('/')) error('INVALID_ENDPOINT', `endpoint "${endpointName}" path must start with "/"`, where)
+    if (endpoint.handler === undefined) error('INVALID_ENDPOINT', `endpoint "${endpointName}" needs a "handler"`, where)
+    if (endpoint.input !== undefined && !isPlainObject(endpoint.input)) error('INVALID_ENDPOINT', `endpoint "${endpointName}" input must be an object`, where)
+    const key = `${String(endpoint.method).toUpperCase()} ${String(endpoint.path)}`
+    const existing = routesByEndpoint.get(key)
+    if (existing) error('DUPLICATE_ENDPOINT', `"${key}" is declared by both "${existing}" and "${endpointName}"`, where)
+    routesByEndpoint.set(key, endpointName)
+    endpoints.push({ name: endpointName, method: String(endpoint.method), path: String(endpoint.path) })
+  }
+
   // ---- references --------------------------------------------------------
   const refs = refsOfDocument(document)
   const components = new Set<string>()
@@ -126,9 +167,43 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     for (const actionName of set.actions) {
       if (!content.actions?.[actionName]) error('UNKNOWN_ACTION', `${section} references unknown action "${actionName}"`, section)
     }
+    for (const collectionName of set.collections) {
+      if (!content.collections?.[collectionName]) error('UNKNOWN_COLLECTION', `${section} references unknown collection "${collectionName}"`, section)
+    }
+    for (const endpointName of set.endpoints) {
+      if (!content.endpoints?.[endpointName]) error('UNKNOWN_ENDPOINT', `${section} references unknown endpoint "${endpointName}"`, section)
+    }
     for (const dynamic of set.dynamic) error('DYNAMIC_REFERENCE', dynamic, section)
     for (const component of set.components) components.add(component)
     escapes.push(...set.escapes)
+  }
+
+  // ---- action placement: server actions stay in handlers, client ones out ----
+  const serverTypes = new Set<string>(SERVER_ACTION_TYPES)
+  const clientTypes = new Set<string>(CLIENT_ACTION_TYPES)
+  const contractServer = new Set<string>([...contract.actions.shared, ...contract.actions.server])
+  const typesOf = (section: string, seen = new Set<string>()): Set<string> => {
+    const out = new Set<string>()
+    if (seen.has(section)) return out
+    seen.add(section)
+    const set = refs[section]
+    if (!set) return out
+    for (const type of set.actionTypes) out.add(type)
+    for (const actionName of set.actions) for (const type of typesOf(`actions.${actionName}`, seen)) out.add(type)
+    return out
+  }
+  for (const section of Object.keys(refs)) {
+    const types = typesOf(section)
+    if (section.startsWith('endpoints.')) {
+      for (const type of types) {
+        if (clientTypes.has(type)) error('CLIENT_ACTION_IN_HANDLER', `${section} runs "${type}", which only exists in the browser`, section)
+        else if (!contractServer.has(type) && !serverTypes.has(type)) error('UNKNOWN_ACTION_TYPE', `${section} runs "${type}", unknown to ${contract.runtime}`, section)
+      }
+      if (!types.has('respond') && !types.has('fail')) warning('NO_RESPONSE', `${section} never runs "respond"; requests will get 204`, section)
+    }
+    else if (section.startsWith('templates.')) {
+      for (const type of types) if (serverTypes.has(type)) error('SERVER_ACTION_IN_TEMPLATE', `${section} runs "${type}", which only exists on the server`, section)
+    }
   }
 
   // ---- definition cycles ---------------------------------------------------
@@ -200,7 +275,7 @@ export function validateDocument(document: BlueprintDocument, options: ValidateD
     }
   }
 
-  return { name, issues, portability, pages, refs }
+  return { name, issues, portability, pages, endpoints, refs }
 }
 
 function emptyPortability(): PortabilityReport {

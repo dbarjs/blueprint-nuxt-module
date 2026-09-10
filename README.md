@@ -49,7 +49,18 @@ reloads the app. Invalid documents fail `nuxt build`.
   with `createdUnder: { document, version }`. The version is the FNV-1a hash of
   the canonical document.
 - **Persists state** per app in `localStorage`; a new document version starts
-  from its initial state again.
+  from its initial state again. Live data fetched from endpoints is never
+  persisted, and pages that fetch on `enter` are not prerendered.
+- **Is a Blueprint runtime**: a document declares its storage backend
+  (`memory`, `fs`, `sqlite`), its collections and its HTTP endpoints, and
+  writes the handlers in the same action language the browser runs — with
+  server effects (`insert`, `find`, `patch`, `respond`…) instead of browser
+  ones. The runtime publishes its **contract** — both halves: the components
+  templates may draw on the client side, the storage, actions and request
+  shape handlers may use on the server side — as `.nuxt/blueprint/runtime.schema.json`
+  and `GET /api/blueprint/contract`, and validates documents against it at
+  build time. `content/public-board.json` is a complete app — storage, API
+  and pages — in one file.
 
 ## Document shape
 
@@ -63,6 +74,9 @@ reloads the app. Invalid documents fail `nuxt build`.
     "state": { "cart": { "lines": [] } },   // initial mutable state
     "definitions": { "subtotal": { "logic": { "sum": [{ "def": "cartLines" }, "total"] } } },
     "actions": { "add-to-cart": [ … ] },
+    "runtime": { "storage": "sqlite" },      // what the document asks of its runtime
+    "collections": { "posts": { "schema": "post" } },
+    "endpoints": { "list-posts": { "method": "GET", "path": "/posts", "handler": [ … ] } },
     "templates": {
       "component:shell": [ … { "type": "outlet" } … ],
       "page:index": { "route": "/", "children": [ … ] }
@@ -73,7 +87,8 @@ reloads the app. Invalid documents fail `nuxt build`.
 ```
 
 See `docs/notation.md` for the full notation: operators, node types, bindings,
-`model` paths, actions, parameter tables and page lifecycle.
+`model` paths, actions, parameter tables, page lifecycle, and the runtime
+sections (storage, collections, endpoints, server actions, contract).
 
 ## Layout of this repository
 
@@ -85,7 +100,8 @@ See `docs/notation.md` for the full notation: operators, node types, bindings,
   `Text`, `Heading`, `Image`, `Spacer`) and the `BlueprintTree` materializer.
 - `src/runtime/composables/` — `useBlueprintDocument`, `useBlueprint`.
 - `src/runtime/pages/` — the app catch-all page and the app index.
-- `src/runtime/server/` — pinned record endpoints.
+- `src/runtime/server/` — pinned record endpoints, the dispatcher for
+  endpoints written in documents, storage backends, the contract route.
 - `content/` — one document per application.
 - `docs/` — notation reference, ADRs, initial context and legacy examples.
 - `test/` — engine tests, document tests, e2e fixture.
@@ -101,7 +117,9 @@ export default defineNuxtConfig({
     componentPrefix: 'Blueprint', // opt-in prefix for app components exposed to documents
     validate: true,            // fail the build on invalid documents
     tests: true,               // run the tests carried by documents at build time
-    api: true,                 // register /api/blueprint/* record endpoints
+    api: true,                 // register /api/blueprint/*: records, contract, document endpoints
+    storage: 'fs',             // default backend for collections: memory | fs | sqlite
+    dataDir: '.data/blueprint', // fs records and sqlite databases (relative to rootDir)
     ui: {},                    // forwarded to @nuxt/ui
     content: {},               // forwarded to @nuxt/content
   },

@@ -1,10 +1,9 @@
 import { createError, defineEventHandler, getRouterParam, readBody } from 'h3'
-import { queryCollection } from '@nuxt/content/nitro'
 import { validateSchema } from '../../../../engine/schema'
 import { createEvaluator } from '../../../../engine/logic'
-import { createId, hashDocument } from '../../../../engine/hash'
-import type { BlueprintDocument } from '../../../../engine/types'
+import { createId } from '../../../../engine/hash'
 import { recordKey, recordsStorage, type BlueprintRecord } from '../../../utils/records'
+import { loadPublishedDocument } from '../../../utils/document'
 
 /**
  * Create a pinned record (an order, a quote...) for an app.
@@ -18,10 +17,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ schema?: string, data: unknown, createdUnder?: { document: string, version: string } }>(event)
   if (!body || body.data === undefined) throw createError({ statusCode: 400, statusMessage: 'Missing "data"' })
 
-  const item = (await queryCollection(event, 'blueprints').where('stem', '=', app).first()) as unknown as (Record<string, unknown> & { name?: string }) | null
-  if (!item) throw createError({ statusCode: 404, statusMessage: `Unknown application "${app}"` })
-  const document = { ...item, name: item.name || app } as unknown as BlueprintDocument
-  const version = hashDocument(document)
+  const { document, version } = await loadPublishedDocument(event, app)
 
   if (body.createdUnder && body.createdUnder.version !== version) {
     throw createError({

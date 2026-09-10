@@ -5,8 +5,10 @@ import type { BlueprintActions, BlueprintDocument, EvalScope, Logic } from '../e
 import { createEvaluator, type Evaluator } from '../engine/logic'
 import { runActions, type ActionEffects, type ActionResult } from '../engine/actions'
 import { evaluateTemplate, isPageTemplate, resolvePage, routeOf, type AbstractNode, type ResolvedPage } from '../engine/template'
-import { deepClone, deepMerge, getPath, setPath } from '../engine/path'
+import { deepClone, deepMerge, getPath, setPath, splitPath } from '../engine/path'
 import { hashDocument } from '../engine/hash'
+import { endpointUrl } from '../engine/endpoints'
+import { livePathsOf } from '../engine/refs'
 
 export interface BlueprintRuntime {
   app: string
@@ -107,6 +109,7 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
 
   const href = (to: string, params: Record<string, unknown> = {}): string => {
     let path = to
+    if (to.startsWith('endpoint:')) return endpointUrl(document, to.slice('endpoint:'.length), params).url
     if (to.startsWith('page:')) {
       const template = document.content.templates[to]
       path = isPageTemplate(template) ? routeOf(to, template) : '/'
@@ -124,12 +127,24 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
     toast: (toast) => {
       host.toast.add({ title: toast.title, description: toast.description, color: toast.color || 'primary', icon: toast.icon })
     },
-    submit: async ({ endpoint, body, schema }) => {
-      const url = endpoint || `/api/blueprint/${app}/records`
-      return await $fetch(url, {
+    // `submit` without an endpoint goes to the built-in records API with its
+    // envelope; a named endpoint receives the payload as written, pinned.
+    submit: async ({ endpoint, body, schema, params, query }) => {
+      if (endpoint && !endpoint.startsWith('/')) {
+        const target = endpointUrl(document, endpoint, params, query)
+        const payload = body && typeof body === 'object' && !Array.isArray(body) ? { ...(body as Record<string, unknown>), createdUnder: { document: app, version } } : body
+        return await $fetch(target.url, { method: target.method, body: payload as Record<string, unknown> })
+      }
+      return await $fetch(endpoint || `/api/blueprint/${app}/records`, {
         method: 'POST',
         body: { schema, data: body, createdUnder: { document: app, version } },
       })
+    },
+    fetch: async ({ endpoint, body, params, query }) => {
+      if (!endpoint) throw new Error('[blueprint] fetch needs an endpoint')
+      if (endpoint.startsWith('/')) return await $fetch(endpoint, { method: body === undefined ? 'GET' : 'POST', body: body as Record<string, unknown> | undefined, query: query as Record<string, string> })
+      const target = endpointUrl(document, endpoint, params, query)
+      return await $fetch(target.url, { method: target.method, body: body as Record<string, unknown> | undefined })
     },
     log: value => console.log('[blueprint]', value),
     onMutate: () => persist(),
@@ -156,6 +171,18 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
   })
 
   // ---- persistence (client only) -------------------------------------------
+  // Live paths (fetch/submit results) are server data: never saved, never
+  // restored over what the server just rendered.
+  const livePaths = livePathsOf(document)
+  const withoutLive = (source: Record<string, unknown>) => {
+    const copy = deepClone(source)
+    for (const path of livePaths) {
+      const segments = splitPath(path)
+      const parent = segments.length > 1 ? getPath(copy, segments.slice(0, -1)) : copy
+      if (parent && typeof parent === 'object') Reflect.deleteProperty(parent as object, segments[segments.length - 1]!)
+    }
+    return copy
+  }
   let persistTimer: ReturnType<typeof setTimeout> | null = null
   const storageKey = `${STORAGE_PREFIX}${app}`
   const persist = () => {
@@ -163,7 +190,7 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
     if (persistTimer) clearTimeout(persistTimer)
     persistTimer = setTimeout(() => {
       try {
-        localStorage.setItem(storageKey, JSON.stringify({ version, state }))
+        localStorage.setItem(storageKey, JSON.stringify({ version, state: withoutLive(state) }))
       }
       catch { /* storage may be unavailable */ }
     }, 150)
@@ -178,7 +205,7 @@ function createRuntime(document: BlueprintDocument, version: string, host: Runti
         const saved = JSON.parse(raw) as { version: string, state: Record<string, unknown> }
         // A new document version starts from its own initial state; only
         // keep what the user was building if the document has not changed.
-        if (saved.version === version && saved.state) deepMerge(state, saved.state)
+        if (saved.version === version && saved.state) deepMerge(state, withoutLive(saved.state))
       }
     }
     catch { /* ignore corrupted storage */ }

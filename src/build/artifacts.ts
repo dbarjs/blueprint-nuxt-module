@@ -3,6 +3,8 @@
  * the JSON Schema of the document format (for editor IntelliSense).
  */
 import { BASE_VOCABULARY } from '../runtime/engine/registry'
+import { ACTION_TYPES } from '../runtime/engine/types'
+import { componentNames, RUNTIME_CONTRACT, runtimeSchema, type RuntimeContract } from '../runtime/engine/contract'
 
 export interface RegistryLayers {
   base: string[]
@@ -55,7 +57,7 @@ export function layersOf(components: ComponentInfo[]): RegistryLayers {
   }
 }
 
-export function manifestTemplate(components: ComponentInfo[], version: string): string {
+export function manifestTemplate(components: ComponentInfo[], version: string, contract: RuntimeContract = RUNTIME_CONTRACT): string {
   const layers = layersOf(components)
   const manifest = {
     vocabulary: 'blueprint-nuxt-module',
@@ -72,15 +74,21 @@ export function manifestTemplate(components: ComponentInfo[], version: string): 
       app: layers.app,
     },
     nodeTypes: ['component', 'html', 'text', 'if', 'for', 'template', 'outlet'],
-    actionTypes: ['set', 'push', 'remove', 'update', 'increment', 'reset', 'navigate', 'toast', 'if', 'validate', 'submit', 'action', 'sequence', 'log'],
+    actionTypes: [...ACTION_TYPES],
+    runtime: contract,
   }
   return JSON.stringify(manifest, null, 2)
 }
 
-/** JSON Schema for documents, with `as` constrained to the registry. */
-export function documentSchemaTemplate(components: ComponentInfo[]): string {
-  const layers = layersOf(components)
-  const componentNames = [...new Set([...layers.base, ...layers.nuxtUi, ...layers.app])].sort()
+/** JSON Schema of what the runtime owns: server sections and the component vocabulary. */
+export function runtimeSchemaTemplate(contract: RuntimeContract): string {
+  return JSON.stringify(runtimeSchema(contract), null, 2)
+}
+
+/** JSON Schema for documents; `as` is constrained to the contract's components. */
+export function documentSchemaTemplate(contract: RuntimeContract): string {
+  const names = componentNames(contract)
+  const component = { $ref: './runtime.schema.json#/$defs/component' }
   const logic = { $ref: '#/$defs/logic' }
   const actions = { $ref: '#/$defs/actions' }
   const nodes = { type: 'array', items: { $ref: '#/$defs/node' } }
@@ -120,6 +128,10 @@ export function documentSchemaTemplate(components: ComponentInfo[]): string {
           actions: { type: 'object', additionalProperties: actions },
           templates: { type: 'object', additionalProperties: { anyOf: [nodes, { $ref: '#/$defs/page' }] } },
           tests: { type: 'array', items: { $ref: '#/$defs/test' } },
+          // Owned by the runtime: generated next to this file from its contract.
+          runtime: { $ref: './runtime.schema.json#/$defs/runtime' },
+          collections: { $ref: './runtime.schema.json#/$defs/collections' },
+          endpoints: { $ref: './runtime.schema.json#/$defs/endpoints' },
         },
       },
     },
@@ -176,8 +188,19 @@ export function documentSchemaTemplate(components: ComponentInfo[]): string {
         type: 'object',
         required: ['type'],
         properties: {
-          type: { type: 'string', enum: ['set', 'push', 'remove', 'update', 'increment', 'reset', 'navigate', 'toast', 'if', 'validate', 'submit', 'action', 'sequence', 'log'] },
+          type: { type: 'string', enum: [...ACTION_TYPES] },
           path: { type: 'string' },
+          collection: { type: 'string' },
+          data: logic,
+          id: logic,
+          sort: { $ref: './runtime.schema.json#/$defs/serverAction/properties/sort' },
+          limit: logic,
+          offset: logic,
+          as: { type: 'string' },
+          status: { type: 'integer' },
+          headers: { type: 'object', additionalProperties: { type: 'string' } },
+          message: logic,
+          issues: logic,
           value: logic,
           where: logic,
           index: logic,
@@ -209,11 +232,11 @@ export function documentSchemaTemplate(components: ComponentInfo[]): string {
         type: 'object',
         required: ['type'],
         properties: {
-          type: { type: 'string', enum: ['component', 'html', 'text', 'if', 'for', 'template', 'outlet'] },
+          type: { $ref: './runtime.schema.json#/$defs/nodeType' },
           if: logic,
           for: { type: 'object', required: ['in'], properties: { in: logic, as: { type: 'string' }, index: { type: 'string' }, key: { type: 'string' } } },
           key: { type: ['string', 'number'] },
-          as: { type: 'string', anyOf: [{ enum: componentNames }, { type: 'string' }] },
+          as: { type: 'string', anyOf: [component, { type: 'string' }] },
           props: { type: 'object' },
           bind: { type: 'object', additionalProperties: logic },
           content: logic,
@@ -230,7 +253,7 @@ export function documentSchemaTemplate(components: ComponentInfo[]): string {
           with: { type: 'object', additionalProperties: logic },
         },
         allOf: [
-          { if: { properties: { type: { const: 'component' } } }, then: { required: ['as'], properties: { as: { enum: componentNames } } } },
+          { if: { properties: { type: { const: 'component' } } }, then: { required: ['as'], properties: { as: { enum: names } } } },
           { if: { properties: { type: { const: 'template' } } }, then: { required: ['name'] } },
           { if: { properties: { type: { const: 'for' } } }, then: { required: ['in'] } },
           { if: { properties: { type: { const: 'if' } } }, then: { required: ['condition'] } },

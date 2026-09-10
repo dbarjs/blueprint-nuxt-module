@@ -221,7 +221,8 @@ const builtinOperators: Record<string, OperatorFn> = {
   // Alias kept for compatibility with earlier documents.
   'value': (args, scope) => getPath(scope.state, str(args[0])),
   'context': (args, scope) => {
-    const path = str(args[0])
+    // `{ "context": "params.id" }` or `{ "context": ["params", "id"] }`
+    const path = args.filter(arg => arg !== undefined && arg !== null).map(str).join('.')
     return path === '' ? scope.context : getPath(scope.context, path)
   },
   'def': (args, scope, ev) => ev.definition(str(args[0]), scope),

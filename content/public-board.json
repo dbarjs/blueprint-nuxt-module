@@ -1,0 +1,475 @@
+{
+  "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "id": "01J9PUBLICBOARD00000000001",
+  "name": "public-board",
+  "content": {
+    "meta": {
+      "title": "Public Board",
+      "description": "A public mural: anyone can pin a note. The storage, the endpoints and the pages are all written in this one document — the Nuxt module is the runtime.",
+      "icon": "i-lucide-messages-square",
+      "layout": "component:shell",
+      "locale": "en-US",
+      "theme": { "primary": "violet", "neutral": "zinc" }
+    },
+
+    "runtime": {
+      "storage": "sqlite"
+    },
+
+    "collections": {
+      "posts": {
+        "schema": "post",
+        "description": "Every note pinned to the mural. Records get id/createdAt from the runtime."
+      }
+    },
+
+    "resources": {
+      "settings": {
+        "type": "constant",
+        "name": "Board settings",
+        "data": {
+          "maxLength": 280,
+          "maxNickname": 24,
+          "pageSize": 50,
+          "defaultNickname": "anonymous"
+        }
+      },
+      "moods": {
+        "type": "references",
+        "name": "Moods",
+        "description": "A note carries one mood; it colors the card and filters the mural.",
+        "data": [
+          { "id": "cheer", "label": "Cheer", "icon": "i-lucide-party-popper", "color": "primary" },
+          { "id": "idea", "label": "Idea", "icon": "i-lucide-lightbulb", "color": "warning" },
+          { "id": "question", "label": "Question", "icon": "i-lucide-circle-help", "color": "info" },
+          { "id": "rant", "label": "Rant", "icon": "i-lucide-flame", "color": "error" }
+        ]
+      }
+    },
+
+    "schemas": {
+      "post": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1, "maxLength": 280, "message": "Write something between 1 and 280 characters." },
+          "nickname": { "type": "string", "maxLength": 24, "message": "Nicknames have at most 24 characters." },
+          "mood": { "type": "string", "enum": ["cheer", "idea", "question", "rant"] }
+        }
+      },
+      "board-query": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "mood": { "type": "string", "enum": ["cheer", "idea", "question", "rant"] }
+        }
+      },
+      "post-params": {
+        "type": "object",
+        "required": ["id"],
+        "properties": { "id": { "type": "string", "minLength": 1 } }
+      }
+    },
+
+    "endpoints": {
+      "list-posts": {
+        "method": "GET",
+        "path": "/posts",
+        "description": "Newest notes first, optionally filtered by mood.",
+        "input": { "query": "board-query" },
+        "handler": [
+          {
+            "type": "find",
+            "collection": "posts",
+            "where": { "or": [{ "isEmpty": [{ "state": "query.mood" }] }, { "==": [{ "var": "item.mood" }, { "state": "query.mood" }] }] },
+            "sort": { "createdAt": "desc" },
+            "limit": { "coalesce": [{ "state": "query.limit" }, { "resource": ["settings", "pageSize"] }] },
+            "as": "items"
+          },
+          { "type": "count", "collection": "posts", "as": "total" },
+          { "type": "respond", "body": { "obj": { "items": { "var": "items" }, "total": { "var": "total" }, "generatedAt": { "context": "now" } } } }
+        ]
+      },
+      "create-post": {
+        "method": "POST",
+        "path": "/posts",
+        "description": "Pin a note. The body is validated with the `post` schema before the handler runs; the collection validates the record again on insert.",
+        "input": { "body": "post" },
+        "pinned": true,
+        "handler": [
+          {
+            "type": "insert",
+            "collection": "posts",
+            "data": {
+              "obj": {
+                "text": { "trim": [{ "state": "body.text" }] },
+                "nickname": { "if": [{ "isEmpty": [{ "state": "body.nickname" }] }, { "resource": ["settings", "defaultNickname"] }, { "trim": [{ "state": "body.nickname" }] }] },
+                "mood": { "coalesce": [{ "state": "body.mood" }, "cheer"] },
+                "postedUnder": { "context": "version" }
+              }
+            },
+            "as": "post"
+          },
+          { "type": "respond", "status": 201, "body": { "var": "post" } }
+        ]
+      },
+      "get-post": {
+        "method": "GET",
+        "path": "/posts/:id",
+        "input": { "params": "post-params" },
+        "handler": [
+          { "type": "findOne", "collection": "posts", "id": { "state": "params.id" }, "as": "post" },
+          { "type": "if", "condition": { "!": [{ "var": "post" }] }, "then": { "type": "fail", "status": 404, "message": { "cat": ["No note with id ", { "state": "params.id" }] } } },
+          { "type": "respond", "body": { "var": "post" } }
+        ]
+      },
+      "board-stats": {
+        "method": "GET",
+        "path": "/stats",
+        "description": "How many notes per mood.",
+        "handler": [
+          { "type": "count", "collection": "posts", "as": "total" },
+          { "type": "count", "collection": "posts", "where": { "==": [{ "var": "item.mood" }, "cheer"] }, "as": "cheer" },
+          { "type": "count", "collection": "posts", "where": { "==": [{ "var": "item.mood" }, "idea"] }, "as": "idea" },
+          { "type": "count", "collection": "posts", "where": { "==": [{ "var": "item.mood" }, "question"] }, "as": "question" },
+          { "type": "count", "collection": "posts", "where": { "==": [{ "var": "item.mood" }, "rant"] }, "as": "rant" },
+          { "type": "respond", "body": { "obj": { "total": { "var": "total" }, "byMood": { "obj": { "cheer": { "var": "cheer" }, "idea": { "var": "idea" }, "question": { "var": "question" }, "rant": { "var": "rant" } } } } } }
+        ]
+      }
+    },
+
+    "state": {
+      "draft": { "text": "", "nickname": "", "mood": "cheer" },
+      "board": { "items": [], "total": 0, "generatedAt": null },
+      "filter": { "mood": null },
+      "current": null,
+      "error": null
+    },
+
+    "definitions": {
+      "remaining": {
+        "type": "number",
+        "description": "Characters left in the draft.",
+        "logic": { "-": [{ "resource": ["settings", "maxLength"] }, { "length": [{ "trim": [{ "state": "draft.text" }] }] }] }
+      },
+      "canPost": {
+        "type": "boolean",
+        "logic": { "and": [{ "!": [{ "isEmpty": [{ "state": "draft.text" }] }] }, { ">=": [{ "def": "remaining" }, 0] }, { "!": [{ "context": "busy" }] }] }
+      },
+      "draftMood": {
+        "type": "object",
+        "visibility": "private",
+        "logic": { "findBy": [{ "resource": "moods" }, "id", { "state": "draft.mood" }] }
+      },
+      "postCount": { "type": "number", "logic": { "state": "board.total" } },
+      "shownCount": { "type": "number", "logic": { "length": [{ "state": "board.items" }] } },
+      "hasPosts": { "type": "boolean", "logic": { ">": [{ "def": "shownCount" }, 0] } },
+      "filterLabel": {
+        "type": "string",
+        "logic": {
+          "if": [
+            { "isEmpty": [{ "state": "filter.mood" }] },
+            { "cat": [{ "def": "postCount" }, " ", { "plural": [{ "def": "postCount" }, "note", "notes"] }, " on the board"] },
+            { "cat": [{ "def": "shownCount" }, " ", { "plural": [{ "def": "shownCount" }, "note", "notes"] }, " tagged ", { "lower": [{ "get": [{ "findBy": [{ "resource": "moods" }, "id", { "state": "filter.mood" }] }, "label"] }] }] }
+          ]
+        }
+      }
+    },
+
+    "actions": {
+      "load-board": {
+        "type": "fetch",
+        "endpoint": "list-posts",
+        "query": { "limit": { "resource": ["settings", "pageSize"] }, "mood": { "state": "filter.mood" } },
+        "result": "board",
+        "catch": { "type": "set", "path": "error", "value": { "var": "error" } }
+      },
+      "publish": {
+        "type": "submit",
+        "endpoint": "create-post",
+        "schema": "post",
+        "body": { "obj": { "text": { "state": "draft.text" }, "nickname": { "state": "draft.nickname" }, "mood": { "state": "draft.mood" } } },
+        "then": [
+          { "type": "set", "path": "draft.text", "value": "" },
+          { "type": "toast", "title": "Pinned to the board", "description": { "cat": ["Posted as ", { "var": "response.nickname" }] }, "icon": "i-lucide-pin", "color": "primary" },
+          "load-board"
+        ],
+        "catch": { "type": "toast", "title": "Could not pin your note", "description": { "var": "error" }, "color": "error", "icon": "i-lucide-triangle-alert" }
+      },
+      "pick-mood": { "type": "set", "path": "draft.mood", "value": { "var": "mood" } },
+      "filter-mood": [
+        { "type": "set", "path": "filter.mood", "value": { "if": [{ "==": [{ "state": "filter.mood" }, { "var": "mood" }] }, null, { "var": "mood" }] } },
+        "load-board"
+      ],
+      "open-post": { "type": "navigate", "to": "page:post", "params": { "id": { "var": "post.id" } } },
+      "load-post": {
+        "type": "fetch",
+        "endpoint": "get-post",
+        "params": { "id": { "context": "params.id" } },
+        "result": "current",
+        "catch": [{ "type": "set", "path": "current", "value": null }, { "type": "set", "path": "error", "value": { "var": "error" } }]
+      }
+    },
+
+    "templates": {
+      "component:shell": [
+        {
+          "type": "component",
+          "as": "Header",
+          "props": { "title": "Public Board", "to": "/", "toggle": false },
+          "slots": {
+            "right": [
+              { "type": "component", "as": "Badge", "props": { "variant": "soft", "color": "neutral", "icon": "i-lucide-database", "label": "sqlite" } },
+              { "type": "component", "as": "Button", "props": { "label": "Stats", "variant": "ghost", "color": "neutral", "icon": "i-lucide-chart-bar", "to": "endpoint:board-stats", "target": "_blank" } }
+            ]
+          }
+        },
+        { "type": "component", "as": "Main", "children": [{ "type": "outlet" }] },
+        {
+          "type": "component",
+          "as": "Footer",
+          "slots": {
+            "left": [{ "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "content": "content/public-board.json declares the storage, the endpoints and the pages. The Nuxt module is the runtime." }],
+            "right": [{ "type": "component", "as": "Link", "props": { "to": "/api/blueprint/contract", "external": true, "target": "_blank" }, "content": "runtime contract" }]
+          }
+        }
+      ],
+
+      "component:mood-badge": [
+        {
+          "type": "component",
+          "as": "Badge",
+          "props": { "variant": "soft", "size": "sm" },
+          "bind": {
+            "label": { "get": [{ "findBy": [{ "resource": "moods" }, "id", { "var": "mood" }] }, "label"] },
+            "color": { "get": [{ "findBy": [{ "resource": "moods" }, "id", { "var": "mood" }] }, "color"] },
+            "icon": { "get": [{ "findBy": [{ "resource": "moods" }, "id", { "var": "mood" }] }, "icon"] }
+          }
+        }
+      ],
+
+      "component:note-card": [
+        {
+          "type": "component",
+          "as": "Group",
+          "props": { "variant": "subtle" },
+          "children": [
+            {
+              "type": "component",
+              "as": "Stack",
+              "props": { "gap": "sm" },
+              "children": [
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": { "direction": "row", "gap": "sm", "align": "center" },
+                  "children": [
+                    { "type": "component", "as": "Avatar", "props": { "size": "sm" }, "bind": { "text": { "upper": [{ "substr": [{ "var": "post.nickname" }, 0, 2] }] }, "alt": { "var": "post.nickname" } } },
+                    { "type": "component", "as": "Text", "props": { "weight": "semibold" }, "bind": { "content": { "var": "post.nickname" } } },
+                    { "type": "template", "name": "component:mood-badge", "with": { "mood": { "var": "post.mood" } } },
+                    { "type": "component", "as": "Spacer" },
+                    { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "format": [{ "var": "post.createdAt" }, "datetime"] } } }
+                  ]
+                },
+                { "type": "component", "as": "Text", "props": { "size": "lg" }, "bind": { "content": { "var": "post.text" } } }
+              ]
+            }
+          ]
+        }
+      ],
+
+      "page:index": {
+        "route": "/",
+        "title": "Mural",
+        "description": "Pin a note for everyone to see.",
+        "enter": "load-board",
+        "children": [
+          {
+            "type": "component",
+            "as": "Container",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "xl", "paddingY": "xl" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "xs" },
+                    "children": [
+                      { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "Say it to everyone" },
+                      { "type": "component", "as": "Text", "props": { "color": "muted" }, "content": "No accounts, no edits, no takebacks. Type a note and pin it to the public mural." }
+                    ]
+                  },
+
+                  {
+                    "type": "component",
+                    "as": "Group",
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Form",
+                        "props": { "schema": "post", "state": "draft", "validateOn": ["blur", "change", "input"] },
+                        "on": { "submit": "publish" },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "md" },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": { "name": "text", "label": "Your note", "required": true },
+                                "bind": { "hint": { "cat": [{ "def": "remaining" }, " left"] } },
+                                "children": [
+                                  { "type": "component", "as": "Textarea", "props": { "placeholder": "What do you want the world to read?", "rows": 3, "autoresize": true, "size": "lg" }, "model": "draft.text" }
+                                ]
+                              },
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "direction": "row", "gap": "md", "align": "end", "wrap": true },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "nickname", "label": "Sign as", "hint": "optional" },
+                                    "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "anonymous", "icon": "i-lucide-user-round" }, "model": "draft.nickname" }]
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "mood", "label": "Mood" },
+                                    "children": [
+                                      {
+                                        "type": "component",
+                                        "as": "Stack",
+                                        "props": { "direction": "row", "gap": "xs", "wrap": true },
+                                        "children": [
+                                          {
+                                            "type": "component",
+                                            "as": "Button",
+                                            "for": { "in": { "resource": "moods" }, "as": "mood", "key": "id" },
+                                            "props": { "size": "sm" },
+                                            "bind": {
+                                              "label": { "var": "mood.label" },
+                                              "icon": { "var": "mood.icon" },
+                                              "color": { "var": "mood.color" },
+                                              "variant": { "if": [{ "==": [{ "var": "mood.id" }, { "state": "draft.mood" }] }, "solid", "outline"] }
+                                            },
+                                            "on": { "click": { "type": "action", "name": "pick-mood", "with": { "mood": { "var": "mood.id" } } } }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  { "type": "component", "as": "Spacer" },
+                                  {
+                                    "type": "component",
+                                    "as": "Button",
+                                    "props": { "label": "Pin to the board", "icon": "i-lucide-pin", "size": "lg", "type": "submit" },
+                                    "bind": { "disabled": { "!": [{ "def": "canPost" }] }, "loading": { "context": "busy" } }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+
+                  { "type": "component", "as": "Alert", "if": { "state": "error" }, "props": { "color": "error", "variant": "soft", "icon": "i-lucide-triangle-alert", "title": "The board could not be loaded" }, "bind": { "description": { "state": "error" } } },
+
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "direction": "row", "gap": "sm", "align": "center", "wrap": true },
+                    "children": [
+                      { "type": "component", "as": "Text", "props": { "weight": "semibold" }, "bind": { "content": { "def": "filterLabel" } } },
+                      { "type": "component", "as": "Spacer" },
+                      {
+                        "type": "component",
+                        "as": "Button",
+                        "for": { "in": { "resource": "moods" }, "as": "mood", "key": "id" },
+                        "props": { "size": "xs", "variant": "soft" },
+                        "bind": {
+                          "label": { "var": "mood.label" },
+                          "icon": { "var": "mood.icon" },
+                          "color": { "if": [{ "==": [{ "var": "mood.id" }, { "state": "filter.mood" }] }, { "var": "mood.color" }, "neutral"] }
+                        },
+                        "on": { "click": { "type": "action", "name": "filter-mood", "with": { "mood": { "var": "mood.id" } } } }
+                      },
+                      { "type": "component", "as": "Button", "props": { "size": "xs", "variant": "ghost", "color": "neutral", "icon": "i-lucide-refresh-cw", "label": "Refresh" }, "on": { "click": "load-board" } }
+                    ]
+                  },
+
+                  {
+                    "type": "for",
+                    "in": { "state": "board.items" },
+                    "as": "post",
+                    "key": "id",
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Link",
+                        "bind": { "to": { "cat": ["/posts/", { "var": "post.id" }] } },
+                        "children": [{ "type": "template", "name": "component:note-card", "with": { "post": { "var": "post" } } }]
+                      }
+                    ],
+                    "empty": [
+                      { "type": "component", "as": "Empty", "props": { "icon": "i-lucide-sticky-note", "title": "The board is empty", "description": "Be the first to pin a note." } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:post": {
+        "route": "/posts/:id",
+        "title": "Note",
+        "enter": "load-post",
+        "children": [
+          {
+            "type": "component",
+            "as": "Container",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "lg", "paddingY": "xl" },
+                "children": [
+                  { "type": "component", "as": "Button", "props": { "label": "Back to the board", "variant": "ghost", "color": "neutral", "icon": "i-lucide-arrow-left", "to": "/" } },
+                  {
+                    "type": "if",
+                    "condition": { "state": "current" },
+                    "children": [
+                      { "type": "template", "name": "component:note-card", "with": { "post": { "state": "current" } } },
+                      { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "cat": ["id ", { "state": "current.id" }, " · pinned under document version ", { "state": "current.postedUnder" }] } } }
+                    ],
+                    "else": [
+                      { "type": "component", "as": "Empty", "props": { "icon": "i-lucide-file-question", "title": "No such note" }, "bind": { "description": { "coalesce": [{ "state": "error" }, "This note does not exist or was never pinned."] } } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+
+    "tests": [
+      { "name": "an empty draft cannot be posted", "expect": { "remaining": 280, "canPost": false, "hasPosts": false, "postCount": 0 } },
+      { "name": "counts remaining characters", "state": { "draft": { "text": "  hello board  " } }, "expect": { "remaining": 269, "canPost": true } },
+      { "name": "a note over the limit cannot be posted", "state": { "draft": { "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" } }, "expect": { "remaining": -1, "canPost": false } },
+      { "name": "describes the whole board", "state": { "board": { "items": [{ "id": "a" }, { "id": "b" }], "total": 12 } }, "expect": { "postCount": 12, "shownCount": 2, "hasPosts": true, "filterLabel": "12 notes on the board" } },
+      { "name": "describes a filtered board", "state": { "board": { "items": [{ "id": "a" }], "total": 12 }, "filter": { "mood": "idea" } }, "expect": { "filterLabel": "1 note tagged idea" } }
+    ]
+  }
+}

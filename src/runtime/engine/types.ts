@@ -61,10 +61,39 @@ export type BlueprintAction
     | { type: 'toast', title: Logic, description?: Logic, color?: string, icon?: string }
     | { type: 'if', condition: Logic, then?: BlueprintActions, else?: BlueprintActions }
     | { type: 'validate', schema: string, path?: string, then?: BlueprintActions, else?: BlueprintActions }
-    | { type: 'submit', schema?: string, path?: string, endpoint?: string, body?: Logic, result?: string, then?: BlueprintActions, catch?: BlueprintActions }
+    | { type: 'submit', schema?: string, path?: string, endpoint?: string, params?: Record<string, Logic>, query?: Record<string, Logic>, body?: Logic, result?: string, then?: BlueprintActions, catch?: BlueprintActions }
+    | { type: 'fetch', endpoint: string, params?: Record<string, Logic>, query?: Record<string, Logic>, body?: Logic, result?: string, then?: BlueprintActions, catch?: BlueprintActions }
     | { type: 'action', name: string, with?: Record<string, Logic> }
     | { type: 'sequence', steps: BlueprintActions }
     | { type: 'log', value: Logic }
+    | ServerAction
+
+/**
+ * Server actions — the closed set an endpoint handler may run on top of the
+ * shared actions. They talk to collections through the runtime's storage
+ * and end the request with `respond` or `fail`. Data actions store their
+ * result as a variable (`as`) for the following steps.
+ */
+export type ServerAction
+  = | { type: 'insert', collection: string, data: Logic, as?: string }
+    | { type: 'find', collection: string, where?: Logic, sort?: SortSpec, limit?: Logic, offset?: Logic, as?: string }
+    | { type: 'findOne', collection: string, id?: Logic, where?: Logic, as?: string }
+    | { type: 'count', collection: string, where?: Logic, as?: string }
+    | { type: 'patch', collection: string, id?: Logic, where?: Logic, set: Record<string, Logic>, as?: string }
+    | { type: 'delete', collection: string, id?: Logic, where?: Logic, as?: string }
+    | { type: 'respond', status?: number, body?: Logic, headers?: Record<string, string> }
+    | { type: 'fail', status?: number, message?: Logic, issues?: Logic }
+
+/** `{ "createdAt": "desc" }` or `[["nickname", "asc"], ["createdAt", "desc"]]`. */
+export type SortSpec = Record<string, 'asc' | 'desc'> | Array<[string, 'asc' | 'desc']>
+
+/** Action types that only make sense on the server (need storage / a response). */
+export const SERVER_ACTION_TYPES = ['insert', 'find', 'findOne', 'count', 'patch', 'delete', 'respond', 'fail'] as const
+/** Action types that only make sense in the browser (need a router / a screen). */
+export const CLIENT_ACTION_TYPES = ['navigate', 'toast', 'fetch', 'submit'] as const
+/** Action types both sides share. */
+export const SHARED_ACTION_TYPES = ['set', 'push', 'remove', 'update', 'increment', 'reset', 'if', 'validate', 'action', 'sequence', 'log'] as const
+export const ACTION_TYPES = [...SHARED_ACTION_TYPES, ...CLIENT_ACTION_TYPES, ...SERVER_ACTION_TYPES] as const
 
 /** An action reference: a named action, an inline action, or a sequence. */
 export type BlueprintActions = string | BlueprintAction | Array<string | BlueprintAction>
@@ -173,6 +202,45 @@ export interface BlueprintTest {
   expect: Record<string, unknown>
 }
 
+/** What the document asks of the runtime hosting it. */
+export interface BlueprintRuntimeRequirements {
+  /** Default storage backend for collections (a name from the runtime contract). */
+  storage?: string
+}
+
+/** A named set of records the runtime persists for the app. */
+export interface BlueprintCollection {
+  /** Document schema every inserted record must satisfy. */
+  schema?: string
+  /** Storage backend override for this collection. */
+  storage?: string
+  description?: string
+}
+
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+
+/** An HTTP route the document writes itself, mounted under `/api/blueprint/<app>`. */
+export interface BlueprintEndpoint {
+  method: HttpMethod
+  /** Route pattern relative to the app (`/posts`, `/posts/:id`). */
+  path: string
+  description?: string
+  /** Document schemas validated before the handler runs (422 on failure). */
+  input?: { body?: string, query?: string, params?: string }
+  /** Server actions. `state` is the request (`body`, `query`, `params`). */
+  handler: BlueprintActions
+  /** Refuse requests pinned (`createdUnder`) to another document version. */
+  pinned?: boolean
+}
+
+/** A stored record: the validated data plus the fields the runtime owns. */
+export interface StoredRecord {
+  id: string
+  createdAt: string
+  updatedAt?: string
+  [key: string]: unknown
+}
+
 export interface BlueprintContent {
   meta: BlueprintMeta
   resources: Record<string, BlueprintResource>
@@ -183,6 +251,12 @@ export interface BlueprintContent {
   actions?: Record<string, BlueprintAction | BlueprintActions>
   templates: Record<string, BlueprintTemplate>
   tests?: BlueprintTest[]
+  /** Runtime requirements (storage backend...). */
+  runtime?: BlueprintRuntimeRequirements
+  /** Named record sets persisted by the runtime. */
+  collections?: Record<string, BlueprintCollection>
+  /** HTTP endpoints written in the document, served by the runtime. */
+  endpoints?: Record<string, BlueprintEndpoint>
 }
 
 export interface BlueprintDocument {

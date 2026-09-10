@@ -1,0 +1,64 @@
+{
+  "name": "board",
+  "content": {
+    "meta": { "title": "Board fixture", "locale": "en-US" },
+    "runtime": { "storage": "sqlite" },
+    "collections": { "notes": { "schema": "note", "storage": "memory" }, "pins": { "schema": "note" } },
+    "resources": {},
+    "schemas": {
+      "note": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string", "minLength": 1, "maxLength": 40 } } },
+      "list-query": { "type": "object", "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 10 } } }
+    },
+    "state": { "notes": { "items": [], "total": 0 }, "draft": { "text": "" } },
+    "definitions": { "count": { "logic": { "state": "notes.total" } } },
+    "endpoints": {
+      "list": {
+        "method": "GET", "path": "/notes", "input": { "query": "list-query" },
+        "handler": [
+          { "type": "find", "collection": "pins", "sort": { "createdAt": "desc" }, "limit": { "coalesce": [{ "state": "query.limit" }, 5] }, "as": "items" },
+          { "type": "count", "collection": "pins", "as": "total" },
+          { "type": "respond", "body": { "obj": { "items": { "var": "items" }, "total": { "var": "total" } } } }
+        ]
+      },
+      "create": {
+        "method": "POST", "path": "/notes", "input": { "body": "note" }, "pinned": true,
+        "handler": [
+          { "type": "insert", "collection": "pins", "data": { "obj": { "text": { "trim": [{ "state": "body.text" }] }, "under": { "context": "version" } } }, "as": "note" },
+          { "type": "respond", "status": 201, "body": { "var": "note" } }
+        ]
+      },
+      "get": {
+        "method": "GET", "path": "/notes/:id",
+        "handler": [
+          { "type": "findOne", "collection": "pins", "id": { "state": "params.id" }, "as": "note" },
+          { "type": "if", "condition": { "!": [{ "var": "note" }] }, "then": { "type": "fail", "status": 404, "message": "no such note" } },
+          { "type": "respond", "body": { "var": "note" } }
+        ]
+      },
+      "scratch": {
+        "method": "POST", "path": "/scratch",
+        "handler": [
+          { "type": "insert", "collection": "notes", "data": { "state": "body" }, "as": "note" },
+          { "type": "count", "collection": "notes", "as": "total" },
+          { "type": "respond", "status": 201, "body": { "obj": { "id": { "var": "note.id" }, "total": { "var": "total" } } } }
+        ]
+      }
+    },
+    "actions": {
+      "load": { "type": "fetch", "endpoint": "list", "result": "notes", "catch": { "type": "log", "value": { "var": "error" } } }
+    },
+    "templates": {
+      "page:index": {
+        "route": "/",
+        "enter": "load",
+        "children": [
+          { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "Board fixture" },
+          { "type": "component", "as": "Text", "bind": { "content": { "cat": ["Total: ", { "def": "count" }] } } },
+          { "type": "for", "in": { "state": "notes.items" }, "as": "note", "key": "id", "children": [
+            { "type": "component", "as": "Text", "bind": { "content": { "cat": ["note: ", { "var": "note.text" }] } } }
+          ], "empty": [{ "type": "text", "content": "No notes yet" }] }
+        ]
+      }
+    }
+  }
+}

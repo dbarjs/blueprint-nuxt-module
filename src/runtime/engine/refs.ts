@@ -18,6 +18,10 @@ export interface RefSet {
   actions: Set<string>
   components: Set<string>
   statePaths: Set<string>
+  collections: Set<string>
+  endpoints: Set<string>
+  /** Action types used (to check client/server placement). */
+  actionTypes: Set<string>
   /** Raw html escape hatches and raw `class` props found. */
   escapes: string[]
   /** References that could not be resolved statically. */
@@ -33,6 +37,9 @@ export function createRefSet(): RefSet {
     actions: new Set(),
     components: new Set(),
     statePaths: new Set(),
+    collections: new Set(),
+    endpoints: new Set(),
+    actionTypes: new Set(),
     escapes: [],
     dynamic: [],
   }
@@ -87,6 +94,7 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
     return refs
   }
   const action = actions as BlueprintAction & Record<string, unknown>
+  refs.actionTypes.add(String(action.type))
   switch (action.type) {
     case 'action':
       refs.actions.add(action.name)
@@ -113,6 +121,7 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
       break
     case 'navigate':
       if (action.to.startsWith('page:')) refs.templates.add(action.to)
+      if (action.to.startsWith('endpoint:')) refs.endpoints.add(action.to.slice('endpoint:'.length))
       for (const [key, value] of Object.entries(action.params || {})) refsOfLogic(value, refs, `${where}.params.${key}`)
       for (const [key, value] of Object.entries(action.query || {})) refsOfLogic(value, refs, `${where}.query.${key}`)
       break
@@ -131,10 +140,37 @@ export function refsOfActions(actions: BlueprintActions | undefined, refs: RefSe
       refsOfActions(action.else, refs, `${where}.else`)
       break
     case 'submit':
-      if (action.schema) refs.schemas.add(action.schema)
+    case 'fetch':
+      if (action.type === 'submit' && action.schema) refs.schemas.add(action.schema)
+      if (action.endpoint && !action.endpoint.startsWith('/')) refs.endpoints.add(action.endpoint)
       if (action.body !== undefined) refsOfLogic(action.body, refs, `${where}.body`)
+      for (const [key, value] of Object.entries(action.params || {})) refsOfLogic(value, refs, `${where}.params.${key}`)
+      for (const [key, value] of Object.entries(action.query || {})) refsOfLogic(value, refs, `${where}.query.${key}`)
       refsOfActions(action.then, refs, `${where}.then`)
       refsOfActions(action.catch, refs, `${where}.catch`)
+      break
+    case 'insert':
+      refs.collections.add(action.collection)
+      refsOfLogic(action.data, refs, `${where}.data`)
+      break
+    case 'find':
+    case 'findOne':
+    case 'count':
+    case 'delete':
+      refs.collections.add(action.collection)
+      for (const key of ['id', 'where', 'limit', 'offset'] as const) if (action[key] !== undefined) refsOfLogic(action[key] as Logic, refs, `${where}.${key}`)
+      break
+    case 'patch':
+      refs.collections.add(action.collection)
+      for (const key of ['id', 'where'] as const) if (action[key] !== undefined) refsOfLogic(action[key] as Logic, refs, `${where}.${key}`)
+      for (const [key, value] of Object.entries(action.set || {})) refsOfLogic(value, refs, `${where}.set.${key}`)
+      break
+    case 'respond':
+      if (action.body !== undefined) refsOfLogic(action.body, refs, `${where}.body`)
+      break
+    case 'fail':
+      if (action.message !== undefined) refsOfLogic(action.message, refs, `${where}.message`)
+      if (action.issues !== undefined) refsOfLogic(action.issues, refs, `${where}.issues`)
       break
     case 'sequence':
       refsOfActions(action.steps, refs, `${where}.steps`)
@@ -186,6 +222,8 @@ function refsOfNode(node: TemplateNode, refs: RefSet, where: string): void {
       refs.components.add(node.as)
       if (node.props && typeof node.props.class === 'string') refs.escapes.push(`${where}: raw class "${node.props.class}" on ${node.as}`)
       if (node.as === 'UForm' && typeof node.props?.schema === 'string') refs.schemas.add(node.props.schema)
+      if (typeof node.props?.to === 'string' && node.props.to.startsWith('endpoint:')) refs.endpoints.add(node.props.to.slice('endpoint:'.length))
+      if (typeof node.props?.to === 'string' && node.props.to.startsWith('page:')) refs.templates.add(node.props.to)
       if (node.model) refs.statePaths.add(typeof node.model === 'string' ? node.model : node.model.path)
       refsOfElementLike(node, refs, where)
       for (const [slot, nodes] of Object.entries(node.slots || {})) refsOfNodes(nodes, refs, `${where}.slots.${slot}`)
@@ -232,6 +270,17 @@ export function refsOfDocument(document: BlueprintDocument): Record<string, RefS
     out['meta'] = createRefSet()
     out['meta'].templates.add(content.meta.layout)
   }
+  for (const [name, collection] of Object.entries(content.collections || {})) {
+    const refs = createRefSet()
+    if (collection?.schema) refs.schemas.add(collection.schema)
+    out[`collections.${name}`] = refs
+  }
+  for (const [name, endpoint] of Object.entries(content.endpoints || {})) {
+    const refs = createRefSet()
+    for (const schemaName of Object.values(endpoint?.input || {})) if (typeof schemaName === 'string') refs.schemas.add(schemaName)
+    refsOfActions(endpoint?.handler, refs, `endpoints.${name}.handler`)
+    out[`endpoints.${name}`] = refs
+  }
   return out
 }
 
@@ -244,6 +293,58 @@ function walkSchema(schema: Record<string, unknown>, refs: RefSet, where: string
   if (schema.requiredWhen !== undefined) refsOfLogic(schema.requiredWhen as Logic, refs, `${where}.requiredWhen`)
   for (const [key, child] of Object.entries((schema.properties as Record<string, Record<string, unknown>>) || {})) walkSchema(child, refs, `${where}.${key}`)
   if (isPlainObject(schema.items)) walkSchema(schema.items, refs, `${where}.items`)
+}
+
+/**
+ * Action types reachable from a handler, following named actions. Used to
+ * place actions (server vs browser) and to detect pages that read live data.
+ */
+export function actionTypesOf(document: BlueprintDocument, actions: BlueprintActions | undefined): Set<string> {
+  const out = new Set<string>()
+  const seenNamed = new Set<string>()
+  const visit = (current: BlueprintActions | undefined) => {
+    const refs = refsOfActions(current, createRefSet(), 'actions')
+    for (const type of refs.actionTypes) out.add(type)
+    for (const name of refs.actions) {
+      if (seenNamed.has(name)) continue
+      seenNamed.add(name)
+      visit(document.content.actions?.[name])
+    }
+  }
+  visit(actions)
+  return out
+}
+
+/**
+ * State paths that hold live server data (`fetch`/`submit` results). The
+ * browser runtime must not persist or restore them: they belong to the
+ * server, not to the draft the user is building.
+ */
+export function livePathsOf(document: BlueprintDocument): Set<string> {
+  const out = new Set<string>()
+  const visitActions = (actions: BlueprintActions | undefined) => {
+    if (!actions || typeof actions === 'string') return
+    for (const action of Array.isArray(actions) ? actions : [actions]) {
+      if (typeof action === 'string') continue
+      const record = action as Record<string, unknown>
+      if ((action.type === 'fetch' || action.type === 'submit') && typeof record.result === 'string') out.add(record.result)
+      for (const key of ['then', 'catch', 'else', 'steps']) visitActions(record[key] as BlueprintActions | undefined)
+    }
+  }
+  const visitNodes = (nodes: TemplateNode[] | undefined) => {
+    for (const node of nodes || []) {
+      const record = node as unknown as Record<string, unknown>
+      for (const handler of Object.values((record.on as Record<string, BlueprintActions>) || {})) visitActions(handler)
+      for (const key of ['children', 'else', 'empty']) visitNodes(record[key] as TemplateNode[] | undefined)
+      for (const slot of Object.values((record.slots as Record<string, TemplateNode[]>) || {})) visitNodes(slot)
+    }
+  }
+  for (const action of Object.values(document.content.actions || {})) visitActions(action)
+  for (const template of Object.values(document.content.templates || {})) {
+    if (!Array.isArray(template)) visitActions(template.enter)
+    visitNodes(templateNodes(template))
+  }
+  return out
 }
 
 /** Dependency closure of a set of sections (what a page needs to run). */
@@ -262,6 +363,8 @@ export function closure(document: BlueprintDocument, roots: string[]): Set<strin
     for (const name of refs.schemas) queue.push(`schemas.${name}`)
     for (const name of refs.templates) queue.push(`templates.${name}`)
     for (const name of refs.actions) queue.push(`actions.${name}`)
+    for (const name of refs.collections) queue.push(`collections.${name}`)
+    for (const name of refs.endpoints) queue.push(`endpoints.${name}`)
   }
   return seen
 }

@@ -8,6 +8,8 @@ import type { BlueprintDocument } from '../runtime/engine/types'
 import { validateDocument, type ValidationReport } from '../runtime/engine/validate'
 import { runDocumentTests, type TestOutcome } from '../runtime/engine/tests'
 import { routeOf, isPageTemplate } from '../runtime/engine/template'
+import { actionTypesOf } from '../runtime/engine/refs'
+import type { RuntimeContract } from '../runtime/engine/contract'
 
 export interface LoadedDocument {
   file: string
@@ -87,16 +89,16 @@ export interface DocumentReport {
   ok: boolean
 }
 
-export function reportDocument(loaded: LoadedDocument, registry: { base: string[], nuxtUi: string[], app: string[] }, runTests: boolean): DocumentReport {
+export function reportDocument(loaded: LoadedDocument, registry: { base: string[], nuxtUi: string[], app: string[] }, runTests: boolean, contract?: RuntimeContract): DocumentReport {
   if (loaded.parseError) {
     return {
       loaded,
-      validation: { name: loaded.stem, issues: [{ level: 'error', code: 'PARSE_ERROR', message: loaded.parseError }], portability: { base: [], nuxtUi: [], app: [], unknown: [], escapes: [] }, pages: [], refs: {} },
+      validation: { name: loaded.stem, issues: [{ level: 'error', code: 'PARSE_ERROR', message: loaded.parseError }], portability: { base: [], nuxtUi: [], app: [], unknown: [], escapes: [] }, pages: [], endpoints: [], refs: {} },
       tests: [],
       ok: false,
     }
   }
-  const validation = validateDocument(loaded.document, { registry })
+  const validation = validateDocument(loaded.document, { registry, contract })
   const hasErrors = validation.issues.some(issue => issue.level === 'error')
   const tests = runTests && !hasErrors ? runDocumentTests(loaded.document) : []
   return { loaded, validation, tests, ok: !hasErrors && tests.every(test => test.passed) }
@@ -122,10 +124,18 @@ export function formatReport(report: DocumentReport): string[] {
   if (portability.app.length) layers.push(`app(${portability.app.length})`)
   const portable = portability.nuxtUi.length === 0 && portability.app.length === 0 && portability.escapes.length === 0
   lines.push(`  vocabulary: ${layers.join(', ') || 'none'} → ${portable ? 'portable' : 'not portable (uses solution vocabulary)'}`)
+  if (validation.endpoints.length) {
+    const collections = Object.entries(loaded.document.content.collections || {}).map(([name, collection]) => `${name}${collection.storage ? `(${collection.storage})` : ''}`)
+    lines.push(`  runtime: ${validation.endpoints.length} endpoints [${validation.endpoints.map(endpoint => `${endpoint.method} ${endpoint.path}`).join(', ')}]${collections.length ? ` over ${collections.join(', ')}` : ''}${loaded.document.content.runtime?.storage ? ` · storage ${loaded.document.content.runtime.storage}` : ''}`)
+  }
   return lines
 }
 
-/** Static routes to prerender: `/<app>` plus every page without params. */
+/**
+ * Static routes to prerender: `/<app>` plus every page without params —
+ * except pages whose `enter` reads live data (`fetch`/`submit`): their
+ * markup depends on the server state at request time.
+ */
 export function prerenderRoutes(documents: LoadedDocument[], prefix = ''): string[] {
   const routes: string[] = []
   for (const { document } of documents) {
@@ -133,6 +143,8 @@ export function prerenderRoutes(documents: LoadedDocument[], prefix = ''): strin
       if (!name.startsWith('page:') || !isPageTemplate(template)) continue
       const route = routeOf(name, template)
       if (route.includes(':') || route.includes('*')) continue
+      const enterTypes = actionTypesOf(document, template.enter)
+      if (enterTypes.has('fetch') || enterTypes.has('submit')) continue
       routes.push(`${prefix}/${document.name}${route === '/' ? '' : route}`)
     }
   }

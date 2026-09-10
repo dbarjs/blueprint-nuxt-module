@@ -4,8 +4,9 @@ This is the notation the engine in `src/runtime/engine` understands. It grew
 out of the insurance case (see `docs/examples`) but is a fresh design: the
 pieces marked **proposed** were introduced by this project to close the open
 points of the handoff (behavior model, actions, state, page lifecycle,
-parameter tables). Everything here is exercised by
-`content/restaurant-menu-shop.json`.
+parameter tables). Sections 1–8 are exercised by
+`content/restaurant-menu-shop.json`; section 9 (the runtime: storage and
+endpoints written in the document) by `content/public-board.json`.
 
 ## 1. Envelope
 
@@ -156,6 +157,8 @@ Node types:
   read `{ "var": "line.id" }` without being told which line it runs for.
 - `key` on `for` is a path inside the item (`"id"`) or an expression.
 - `to` props starting with `/` or `page:` are resolved inside the app prefix.
+  `endpoint:<name>` links to a document endpoint; `external: true` leaves
+  any other `to` untouched (a host route such as `/api/blueprint/contract`).
 - A `Form`/`UForm` whose `schema` is a string gets the document schema as a
   Standard Schema, and whose `state` is a string gets that state subtree.
 
@@ -195,15 +198,151 @@ A handler is a named action, an inline action, or an array (a sequence).
 | `toast` | `title`, `description`, `color`, `icon` |
 | `if` | `condition`, `then`, `else` |
 | `validate` | `schema`, `path`, `then`, `else` (else sees `issues`) |
-| `submit` | `schema`, `path` or `body`, `endpoint`, `result`, `then` (sees `response`), `catch` (sees `issues`/`error`) |
+| `submit` | `schema`, `path` or `body`, `endpoint` (name or URL), `params`, `query`, `result`, `then` (sees `response`), `catch` (sees `issues`/`error`) |
+| `fetch` | `endpoint` (name or URL), `params`, `query`, `body`, `result`, `then` (sees `response`), `catch` (sees `error`) |
 | `action` | `name`, `with: { var: expr }` (call a named action with arguments) |
 | `sequence` | `steps` |
 | `log` | `value` |
 
 State machines and effects stay in code: the runtime supplies `navigate`,
-`toast` and `submit` implementations; the document only parameterizes them.
-`submit` defaults to `POST /api/blueprint/<app>/records`, which validates
-again, pins the record to the document version and refuses stale versions.
+`toast`, `submit` and `fetch` implementations; the document only
+parameterizes them. `submit` without an endpoint goes to the built-in
+`POST /api/blueprint/<app>/records`, which validates again, pins the record
+to the document version and refuses stale versions. With the name of an
+endpoint declared in the document (section 9) it calls that endpoint with
+the declared method and adds `createdUnder` to the payload. `fetch` calls a
+named endpoint and writes the response to `result`.
+
+The `result` paths of `fetch`/`submit` are **live state**: the browser
+never persists or restores them, and a page whose `enter` fetches is not
+prerendered.
+
+## 9. The runtime: storage and endpoints (**proposed**)
+
+A Blueprint **runtime** hosts documents. This module is one: Nuxt gives it a
+build step, a server and a browser, so a document can own its whole app,
+back end included. Three sections belong to the runtime:
+
+```jsonc
+"runtime": { "storage": "sqlite" },          // default backend for collections
+"collections": {
+  "posts": { "schema": "post", "storage": "sqlite" }   // storage optional
+},
+"endpoints": {
+  "create-post": {
+    "method": "POST",
+    "path": "/posts",                        // mounted at /api/blueprint/<app>/posts
+    "input": { "body": "post" },             // schemas checked first → 422
+    "pinned": true,                          // createdUnder.version must match → 409
+    "handler": [
+      { "type": "insert", "collection": "posts",
+        "data": { "obj": { "text": { "trim": [{ "state": "body.text" }] }, "postedUnder": { "context": "version" } } },
+        "as": "post" },
+      { "type": "respond", "status": 201, "body": { "var": "post" } }
+    ]
+  }
+}
+```
+
+A **handler is the same action language** with a different set of injected
+effects. `state` is the request (`body`, `query`, `params`); `context`
+carries `app`, `version`, `method`, `path`, `endpoint`, `now`, `params`,
+`query`, `createdUnder`. Query strings are coerced with the declared schema
+(`"10"` → `10` for an `integer` property). Data actions put their result in
+a variable (`as`) for the next steps:
+
+| Server action | Fields |
+|---|---|
+| `insert` | `collection`, `data` (validated with the collection schema), `as` → the record (`id`, `createdAt` added) |
+| `find` | `collection`, `where` (item predicate), `sort` (`{ "createdAt": "desc" }`), `limit`, `offset`, `as` → records |
+| `findOne` | `collection`, `id` or `where`, `as` → record or `null` |
+| `count` | `collection`, `where`, `as` → number |
+| `patch` | `collection`, `id` or `where`, `set: { field: expr }` (`updatedAt` added, re-validated), `as` → records |
+| `delete` | `collection`, `id` or `where`, `as` → number removed |
+| `respond` | `status` (200), `body`, `headers` — ends the handler |
+| `fail` | `status` (400), `message`, `issues` — ends the handler with an error |
+
+Shared actions (`set`, `if`, `validate`, `action`, `sequence`, `log`…) work
+on both sides; `navigate`, `toast`, `fetch`, `submit` are browser-only and
+the validator rejects them in handlers, as it rejects server actions in
+templates. A handler that never responds answers `204` (warned at build).
+
+**Records are flat**: the validated data plus `id`, `createdAt` and
+`updatedAt`. Predicates, sorting and paging are evaluated in the notation,
+so a storage backend only lists, gets, puts and deletes.
+
+### The contract
+
+A runtime hosts both halves of a document: the templates the browser draws
+and the endpoints the server runs. What it offers on each side is published
+as a **contract**, one object with two halves:
+
+```jsonc
+{
+  "runtime": "blueprint-nuxt-module",
+  "version": "1.0.0",
+  "actions": { "shared": ["set", "..."], "client": ["navigate", "..."], "server": ["insert", "..."] },
+  "client": {
+    "prefix": "",                              // pages live at <prefix>/<app>/<route>
+    "components": { "base": ["Text", "..."], "nuxtUi": ["UButton", "..."], "app": [] },
+    "nodeTypes": ["component", "html", "text", "if", "for", "template", "outlet"],
+    "context": ["app", "version", "base", "path", "params", "query", "page", "busy"],
+    "state": { "persistence": "localStorage", "description": "..." }
+  },
+  "server": {
+    "mount": "/api/blueprint",                 // endpoints live at <mount>/<app>/<path>
+    "storages": [{ "name": "sqlite", "durable": true, "description": "..." }],
+    "defaultStorage": "fs",
+    "request": { "state": ["body", "query", "params"], "context": ["app", "version", "now", "..."] },
+    "recordFields": ["id", "createdAt", "updatedAt"],
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+  }
+}
+```
+
+The `client` half is what a template may draw and read: the component
+layers the host scanned (the base vocabulary, Nuxt UI, and the app's own
+components), the node types, the browser context, and how state survives
+between visits. The `server` half is what a handler may store, read and
+answer. Actions sit above both because they span the two sides.
+
+The engine knows the static part. The module resolves the **effective**
+contract of the host it runs in — its page prefix, its configured default
+storage, its component registry — and publishes that one:
+
+- `.nuxt/blueprint/runtime.schema.json`, the JSON Schema of the sections the
+  runtime owns plus `$defs.component` and `$defs.nodeType`, referenced from
+  the document schema so `$schema` keeps working in the editor;
+- `GET /api/blueprint/contract` (`?format=schema` for the schema);
+- `manifest.json#runtime` for agents.
+
+Build-time validation checks the document against it: unknown component,
+unknown storage, unknown collection or endpoint, duplicate `method + path`,
+actions on the wrong side, and every static reference. Another runtime
+replaces the contract, not the notation.
+
+## 10. Pressures recorded while writing the public board
+
+- **One language for both sides was the right call.** The board's four
+  endpoints took fewer lines than the Nitro handler they replace, and
+  `validate`/`if`/`action` already existed. Only eight new action types were
+  needed, and none of them is a control structure.
+- **`as` versus `result`.** Server steps pass values through variables
+  (`as`); browser actions write into state (`result`). Two idioms for "keep
+  the answer", justified by the fact that a request has no state to keep,
+  but worth a second look.
+- **Collection schema strictness bites.** `additionalProperties: false` on
+  a schema shared by the input and the collection rejects the fields the
+  handler adds (`postedUnder`). The runtime is right to refuse; the pressure
+  is on the author to keep input and record schemas apart when they differ.
+- **Live state had to be named.** Fetched data in `state` collided with
+  browser persistence and with prerendering. Deriving "live paths" from
+  `fetch.result` statically solved both without a new keyword.
+- **Query strings are strings.** Coercing with the declared schema keeps
+  `{ "state": "query.limit" }` numeric without `toNumber` noise in documents.
+- **No access control yet.** Every endpoint is public. The contract has a
+  natural slot for it (an `access` field per endpoint) but no document has
+  forced the decision.
 
 ## 8. Pressures recorded while writing the restaurant document
 

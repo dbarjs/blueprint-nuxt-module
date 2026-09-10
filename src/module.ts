@@ -14,8 +14,9 @@ import {
 import { join, resolve } from 'pathe'
 import type { NuxtModule } from '@nuxt/schema'
 import { formatReport, loadDocuments, prerenderRoutes, reportDocument, type LoadedDocument } from './build/documents'
-import { contentConfigTemplate, cssTemplate, documentSchemaTemplate, manifestTemplate, registryTemplate, type ComponentInfo } from './build/artifacts'
+import { contentConfigTemplate, cssTemplate, documentSchemaTemplate, layersOf, manifestTemplate, registryTemplate, runtimeSchemaTemplate, type ComponentInfo } from './build/artifacts'
 import { RUNTIME_COMPONENT_NAMES } from './runtime/engine/registry'
+import { resolveContract, storageNames, type RuntimeContract } from './runtime/engine/contract'
 
 export interface ModuleOptions {
   /** Directory holding one Blueprint document per app (relative to rootDir). */
@@ -28,8 +29,12 @@ export interface ModuleOptions {
   validate: boolean
   /** Run the tests carried by each document at build time. */
   tests: boolean
-  /** Register the `/api/blueprint/*` record endpoints (pinned submissions). */
+  /** Register the `/api/blueprint/*` routes: built-in records, the contract, and the endpoints documents write. */
   api: boolean
+  /** Default storage backend for document collections (`memory`, `fs`, `sqlite`). */
+  storage: 'memory' | 'fs' | 'sqlite'
+  /** Directory for `fs` records and `sqlite` databases (relative to rootDir). */
+  dataDir: string
   /** Options forwarded to `@nuxt/ui`. */
   ui: Record<string, unknown>
   /** Options forwarded to `@nuxt/content`. */
@@ -49,6 +54,8 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
     validate: true,
     tests: true,
     api: true,
+    storage: 'fs',
+    dataDir: '.data/blueprint',
     ui: {},
     content: {},
   },
@@ -134,12 +141,32 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
       }
     })
 
+    // ---- runtime: storage + endpoints ------------------------------------------
+    if (!storageNames().includes(options.storage)) {
+      throw new Error(`[blueprint] storage "${options.storage}" is not provided by this runtime (available: ${storageNames().join(', ')})`)
+    }
+    const dataDir = resolve(nuxt.options.rootDir, options.dataDir)
+    // The effective contract: static capabilities plus what only this host
+    // knows. Its component layers are filled in place once the registry is
+    // scanned (`components:extend`). Nitro clones the runtime config when it
+    // initializes, so the filled contract is handed over again right before
+    // the server bundle is built: `GET /api/blueprint/contract` then serves
+    // the same contract the documents were validated against.
+    const contract = resolveContract(undefined, { prefix, defaultStorage: options.storage })
+    nuxt.options.runtimeConfig.blueprint = { storage: options.storage, dataDir, contract }
+    nuxt.hook('nitro:build:before', (nitro) => {
+      const config = nitro.options.runtimeConfig as { blueprint?: Record<string, unknown> }
+      config.blueprint = { ...config.blueprint, contract }
+    })
     if (options.api) {
       nuxt.options.nitro.storage ||= {}
-      nuxt.options.nitro.storage.blueprint ||= { driver: 'fs', base: join(nuxt.options.rootDir, '.data/blueprint') }
+      nuxt.options.nitro.storage.blueprint ||= { driver: 'fs', base: dataDir }
+      addServerHandler({ route: '/api/blueprint/contract', method: 'get', handler: resolver.resolve('./runtime/server/api/blueprint/contract.get') })
       addServerHandler({ route: '/api/blueprint/:app/records', method: 'post', handler: resolver.resolve('./runtime/server/api/blueprint/[app]/records.post') })
       addServerHandler({ route: '/api/blueprint/:app/records', method: 'get', handler: resolver.resolve('./runtime/server/api/blueprint/[app]/records.get') })
       addServerHandler({ route: '/api/blueprint/:app/records/:id', method: 'get', handler: resolver.resolve('./runtime/server/api/blueprint/[app]/records/[id].get') })
+      // Endpoints written in documents: everything else under the app.
+      addServerHandler({ route: '/api/blueprint/:app/**', handler: resolver.resolve('./runtime/server/api/blueprint/[app]/[...path]') })
     }
 
     // ---- registry + manifest + schema (generated in .nuxt/blueprint) --------
@@ -150,8 +177,9 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
       getContents: () => registryTemplate(components),
     })
     nuxt.options.alias['#blueprint/registry'] = registryTpl.dst
-    addTemplate({ filename: 'blueprint/manifest.json', write: true, getContents: () => manifestTemplate(components, '1.0.0') })
-    addTemplate({ filename: 'blueprint/schema.json', write: true, getContents: () => documentSchemaTemplate(components) })
+    addTemplate({ filename: 'blueprint/manifest.json', write: true, getContents: () => manifestTemplate(components, '1.0.0', contract) })
+    addTemplate({ filename: 'blueprint/schema.json', write: true, getContents: () => documentSchemaTemplate(contract) })
+    addTemplate({ filename: 'blueprint/runtime.schema.json', write: true, getContents: () => runtimeSchemaTemplate(contract) })
 
     // ---- documents ---------------------------------------------------------------
     let documents: LoadedDocument[] = []
@@ -174,16 +202,9 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
       documents = await loadDocuments(contentDir)
       refreshApps()
       if (!options.validate) return
-      const layers = {
-        base: [] as string[],
-        nuxtUi: components.filter(component => component.layer === 'nuxtUi').map(component => component.pascalName),
-        app: components.filter(component => component.layer !== 'nuxtUi').map(component => component.pascalName),
-      }
-      const { BASE_COMPONENT_NAMES } = await import('./runtime/engine/registry')
-      layers.base = BASE_COMPONENT_NAMES
       let failed = false
       for (const loaded of documents) {
-        const report = reportDocument(loaded, layers, options.tests)
+        const report = reportDocument(loaded, contract.client.components, options.tests, contract)
         const lines = formatReport(report)
         if (report.ok) logger.success(lines.join('\n'))
         else {
@@ -204,6 +225,8 @@ const module: NuxtModule<ModuleOptions> = defineNuxtModule<ModuleOptions>({
         else if (filePath.startsWith(runtimeDir) && RUNTIME_COMPONENT_NAMES.includes(component.pascalName)) components.push({ pascalName: component.pascalName, filePath, layer: 'runtime' })
         else if (component.pascalName.startsWith(options.componentPrefix) && !filePath.startsWith(runtimeDir)) components.push({ pascalName: component.pascalName, filePath, layer: 'app' })
       }
+      const { base, nuxtUi, app } = layersOf(components)
+      Object.assign(contract.client.components, { base, nuxtUi, app })
       await validateAll(!nuxt.options.dev)
     })
 
@@ -231,6 +254,14 @@ declare module '@nuxt/schema' {
     blueprint: {
       prefix: string
       apps: Array<{ name: string, title: string, description: string, icon: string }>
+    }
+  }
+  interface RuntimeConfig {
+    blueprint: {
+      storage: string
+      dataDir: string
+      /** Effective runtime contract, served by `GET /api/blueprint/contract`. */
+      contract: RuntimeContract
     }
   }
 }

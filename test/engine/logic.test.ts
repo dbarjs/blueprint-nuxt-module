@@ -57,6 +57,13 @@ describe('calculation notation', () => {
     expect(ev.evaluate({ resource: ['rates', 'tax'] }, scope())).toBe(8.5)
   })
 
+  it('reads context by dotted path or path segments', () => {
+    const withContext = { state: {}, context: { params: { id: '42' }, app: 'x' }, vars: {} }
+    expect(ev.evaluate({ context: 'params.id' }, withContext)).toBe('42')
+    expect(ev.evaluate({ context: ['params', 'id'] }, withContext)).toBe('42')
+    expect(ev.evaluate({ context: 'app' }, withContext)).toBe('x')
+  })
+
   it('memoizes definitions within a pass and detects cycles', () => {
     expect(() => ev.evaluate({ def: 'loopA' }, scope())).toThrowError(/DEFINITION_CYCLE/)
   })

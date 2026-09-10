@@ -12,13 +12,40 @@ import { BlueprintError } from './errors'
 import { validateSchema } from './schema'
 import { deepClone, getPath, setPath, splitPath } from './path'
 
+export interface EndpointCall {
+  /** Endpoint name from `content.endpoints`, or a raw path (`/api/...`). */
+  endpoint?: string
+  params: Record<string, unknown>
+  query: Record<string, unknown>
+  body?: unknown
+}
+
 export interface ActionEffects {
   navigate?: (to: string, params: Record<string, unknown>, query: Record<string, unknown>) => void | Promise<void>
   toast?: (toast: { title: string, description?: string, color?: string, icon?: string }) => void
-  submit?: (input: { endpoint?: string, body: unknown, schema?: string }) => Promise<unknown>
+  /** `submit`: POST a validated payload (records API or a document endpoint). */
+  submit?: (input: EndpointCall & { schema?: string }) => Promise<unknown>
+  /** `fetch`: call a document endpoint with its declared method. */
+  fetch?: (input: EndpointCall) => Promise<unknown>
   log?: (value: unknown) => void
   /** Called after every state mutation (persistence, HMR, devtools...). */
   onMutate?: (path: string) => void
+}
+
+/**
+ * An action type supplied by the host (server actions live in
+ * `server-actions.ts`). Receives the evaluated helpers of the runner.
+ */
+export type ActionExtension = (action: BlueprintAction & Record<string, unknown>, helpers: ExtensionHelpers) => Promise<ActionResult> | ActionResult
+
+export interface ExtensionHelpers {
+  ctx: ActionContext
+  scope: EvalScope
+  vars: Record<string, unknown>
+  evaluate: (logic: Logic | undefined) => unknown
+  /** Evaluate an item predicate (`where`) the way `remove`/`update` do. */
+  matches: (where: Logic | undefined, item: unknown, index: number) => boolean
+  run: (actions: BlueprintActions | undefined, vars?: Record<string, unknown>) => Promise<ActionResult>
 }
 
 export interface ActionContext {
@@ -29,12 +56,18 @@ export interface ActionContext {
   /** Initial state used by `reset`. */
   initialState: Record<string, unknown>
   effects: ActionEffects
+  /** Extra action types (server actions). Consulted before failing on an unknown type. */
+  extensions?: Record<string, ActionExtension>
 }
 
 export interface ActionResult {
   ok: boolean
   issues?: ValidationIssue[]
   error?: unknown
+  /** The sequence ended early (`respond`/`fail`): stop running further steps. */
+  done?: boolean
+  /** Response produced by `respond`/`fail`. */
+  response?: { status: number, body: unknown, headers?: Record<string, string> }
 }
 
 export async function runActions(
@@ -49,7 +82,7 @@ export async function runActions(
   let result: ActionResult = { ok: true }
   for (const entry of list) {
     result = await runAction(entry, ctx, vars, depth)
-    if (!result.ok) return result
+    if (!result.ok || result.done) return result
   }
   return result
 }
@@ -174,8 +207,24 @@ async function runAction(
       }
       try {
         const response = ctx.effects.submit
-          ? await ctx.effects.submit({ endpoint: action.endpoint, body, schema: action.schema })
+          ? await ctx.effects.submit({ endpoint: action.endpoint, body, schema: action.schema, params: evaluateMap(action.params, evaluate), query: evaluateMap(action.query, evaluate) })
           : body
+        if (action.result) {
+          setPath(ctx.state, action.result, deepClone(response))
+          ctx.effects.onMutate?.(action.result)
+        }
+        return runActions(action.then, ctx, { ...vars, response }, depth + 1)
+      }
+      catch (error) {
+        await runActions(action.catch, ctx, { ...vars, error: String((error as Error)?.message || error) }, depth + 1)
+        return { ok: false, error }
+      }
+    }
+    case 'fetch': {
+      const body = action.body === undefined ? undefined : evaluate(action.body)
+      try {
+        if (!ctx.effects.fetch) throw new BlueprintError('UNSUPPORTED_ACTION', 'this runtime cannot "fetch"')
+        const response = await ctx.effects.fetch({ endpoint: action.endpoint, body, params: evaluateMap(action.params, evaluate), query: evaluateMap(action.query, evaluate) })
         if (action.result) {
           setPath(ctx.state, action.result, deepClone(response))
           ctx.effects.onMutate?.(action.result)
@@ -194,9 +243,26 @@ async function runAction(
       for (const [key, logic] of Object.entries(action.with || {})) withVars[key] = evaluate(logic)
       return callNamed(action.name, withVars, ctx, vars, depth)
     }
-    default:
-      throw new BlueprintError('UNKNOWN_ACTION', `unknown action type "${String((action as { type: string }).type)}"`)
+    default: {
+      const type = String((action as { type: string }).type)
+      const extension = ctx.extensions?.[type]
+      if (!extension) throw new BlueprintError('UNKNOWN_ACTION', `unknown action type "${type}"`)
+      return extension(action as BlueprintAction & Record<string, unknown>, {
+        ctx,
+        scope,
+        vars,
+        evaluate,
+        matches: (where, item, index) => where === undefined ? true : truthy(ev.evaluate(where, { ...scope, vars: { ...vars, '': item, item, index } })),
+        run: (actions, extra = {}) => runActions(actions, ctx, { ...vars, ...extra }, depth + 1),
+      })
+    }
   }
+}
+
+function evaluateMap(map: Record<string, Logic> | undefined, evaluate: (logic: Logic | undefined) => unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, logic] of Object.entries(map || {})) out[key] = evaluate(logic)
+  return out
 }
 
 async function callNamed(name: string, withVars: Record<string, unknown>, ctx: ActionContext, vars: Record<string, unknown>, depth: number): Promise<ActionResult> {

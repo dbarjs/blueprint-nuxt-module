@@ -97,8 +97,16 @@ function wireSpecialProps(node: AbstractNode, props: Record<string, unknown>, ru
       props.state = target
     }
   }
-  if (typeof props.to === 'string' && (props.to.startsWith('/') || props.to.startsWith('page:'))) {
-    props.to = runtime.href(props.to)
+  // `to` is app-relative (`/cart`, `page:cart`) unless `external` is set;
+  // `endpoint:<name>` links to a document endpoint (always external).
+  if (typeof props.to === 'string') {
+    if (props.to.startsWith('endpoint:')) {
+      props.to = runtime.href(props.to)
+      props.external = true
+    }
+    else if (props.external !== true && (props.to.startsWith('/') || props.to.startsWith('page:'))) {
+      props.to = runtime.href(props.to)
+    }
   }
 }
 
