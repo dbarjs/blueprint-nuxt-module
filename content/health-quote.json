@@ -1,0 +1,1094 @@
+{
+  "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "id": "01J9HEALTHQUOTE0000000001",
+  "name": "health-quote",
+  "content": {
+    "meta": {
+      "title": "Health Quote",
+      "description": "Instant quotations for a health insurance product. The rating tables, the pricing definitions, the endpoints and the pages are one document; the browser prices the quote live and the server prices it again with the very same definitions before storing it.",
+      "icon": "i-lucide-heart-pulse",
+      "layout": "component:shell",
+      "locale": "en-US",
+      "currency": "USD",
+      "theme": { "primary": "emerald", "neutral": "slate" }
+    },
+
+    "runtime": {
+      "storage": "sqlite"
+    },
+
+    "collections": {
+      "quotes": {
+        "schema": "quote",
+        "description": "Every quotation issued. The stored pricing is the server's, computed under the document version recorded in `quotedUnder`."
+      }
+    },
+
+    "resources": {
+      "settings": {
+        "type": "constant",
+        "name": "Underwriting settings",
+        "data": {
+          "minAge": 18,
+          "maxAge": 75,
+          "maxDependents": 6,
+          "dependentRate": 0.35,
+          "annualDiscount": 0.08,
+          "minMonthly": 9900,
+          "recentLimit": 20
+        }
+      },
+
+      "plans": {
+        "type": "references",
+        "name": "Plans",
+        "description": "Monthly base premium in cents for a 26 to 35 year old with no risk factors and no dependents.",
+        "data": [
+          {
+            "id": "essential",
+            "label": "Essential",
+            "tagline": "Covers the unexpected.",
+            "icon": "i-lucide-shield",
+            "monthly": 12900,
+            "deductible": 250000,
+            "coverage": ["Primary care", "Emergency room", "Generic drugs"]
+          },
+          {
+            "id": "balanced",
+            "label": "Balanced",
+            "tagline": "Everyday care, specialists included.",
+            "icon": "i-lucide-shield-check",
+            "monthly": 21900,
+            "deductible": 100000,
+            "coverage": ["Primary care", "Emergency room", "Generic drugs", "Specialists", "Dental check-ups", "Mental health"]
+          },
+          {
+            "id": "complete",
+            "label": "Complete",
+            "tagline": "No deductible, nothing left out.",
+            "icon": "i-lucide-shield-plus",
+            "monthly": 34900,
+            "deductible": 0,
+            "coverage": ["Primary care", "Emergency room", "All drugs", "Specialists", "Dental and vision", "Mental health", "Maternity", "International travel"]
+          }
+        ]
+      },
+
+      "age-bands": {
+        "type": "parameter-table",
+        "name": "Age bands",
+        "description": "Multiplier by age. First matching row wins; an age outside every band is not insurable and falls back to `default`.",
+        "hitPolicy": "first",
+        "default": { "band": "none", "label": "Outside 18 to 75", "factor": 0, "eligible": false },
+        "data": [
+          { "match": { "age": { "gte": 18, "lte": 25 } }, "band": "18-25", "label": "18 to 25", "factor": 0.85, "eligible": true },
+          { "match": { "age": { "gte": 26, "lte": 35 } }, "band": "26-35", "label": "26 to 35", "factor": 1, "eligible": true },
+          { "match": { "age": { "gte": 36, "lte": 45 } }, "band": "36-45", "label": "36 to 45", "factor": 1.2, "eligible": true },
+          { "match": { "age": { "gte": 46, "lte": 55 } }, "band": "46-55", "label": "46 to 55", "factor": 1.55, "eligible": true },
+          { "match": { "age": { "gte": 56, "lte": 65 } }, "band": "56-65", "label": "56 to 65", "factor": 2.1, "eligible": true },
+          { "match": { "age": { "gte": 66, "lte": 75 } }, "band": "66-75", "label": "66 to 75", "factor": 2.9, "eligible": true }
+        ]
+      },
+
+      "risk-factors": {
+        "type": "parameter-table",
+        "name": "Behavior factors",
+        "description": "Every row whose `match` fits the applicant applies (`collect`); the factors multiply. No row matching means no surcharge and no discount.",
+        "hitPolicy": "collect",
+        "default": [],
+        "data": [
+          { "match": { "smoker": true }, "id": "smoker", "label": "Smoker", "factor": 1.5, "icon": "i-lucide-cigarette", "tone": "error" },
+          { "match": { "alcohol": "social" }, "id": "alcohol-social", "label": "Social drinker", "factor": 1.05, "icon": "i-lucide-wine", "tone": "warning" },
+          { "match": { "alcohol": "frequent" }, "id": "alcohol-frequent", "label": "Frequent drinker", "factor": 1.25, "icon": "i-lucide-wine", "tone": "error" },
+          { "match": { "activity": "sedentary" }, "id": "sedentary", "label": "Sedentary", "factor": 1.05, "icon": "i-lucide-sofa", "tone": "warning" },
+          { "match": { "activity": "regular" }, "id": "active", "label": "Exercises regularly", "factor": 0.9, "icon": "i-lucide-bike", "tone": "success" },
+          { "match": { "activity": "extreme" }, "id": "extreme", "label": "Extreme sports", "factor": 1.3, "icon": "i-lucide-mountain-snow", "tone": "error" },
+          { "match": { "sleep": "short" }, "id": "short-sleep", "label": "Sleeps under 6 hours", "factor": 1.08, "icon": "i-lucide-moon", "tone": "warning" }
+        ]
+      },
+
+      "alcohol-options": {
+        "type": "options",
+        "name": "Alcohol",
+        "data": [
+          { "value": "none", "label": "Never", "description": "No alcohol" },
+          { "value": "social", "label": "Social", "description": "A few drinks a week" },
+          { "value": "frequent", "label": "Frequent", "description": "Most days" }
+        ]
+      },
+
+      "activity-options": {
+        "type": "options",
+        "name": "Physical activity",
+        "data": [
+          { "value": "sedentary", "label": "Sedentary", "description": "Little or no exercise" },
+          { "value": "regular", "label": "Regular", "description": "Sports two or more times a week" },
+          { "value": "extreme", "label": "Extreme", "description": "Climbing, diving, motorsport..." }
+        ]
+      },
+
+      "sleep-options": {
+        "type": "options",
+        "name": "Sleep",
+        "data": [
+          { "value": "normal", "label": "6 hours or more" },
+          { "value": "short", "label": "Under 6 hours" }
+        ]
+      },
+
+      "billing-options": {
+        "type": "options",
+        "name": "Billing",
+        "data": [
+          { "value": "monthly", "label": "Monthly", "description": "Pay every month" },
+          { "value": "annual", "label": "Annual", "description": "Pay once a year, 8% off" }
+        ]
+      },
+
+      "statuses": {
+        "type": "references",
+        "name": "Quote statuses",
+        "data": [
+          { "id": "open", "label": "Open", "color": "primary", "icon": "i-lucide-file-text" },
+          { "id": "accepted", "label": "Accepted", "color": "success", "icon": "i-lucide-badge-check" }
+        ]
+      }
+    },
+
+    "schemas": {
+      "applicant": {
+        "type": "object",
+        "required": ["name", "email", "age", "plan", "billing"],
+        "properties": {
+          "name": { "type": "string", "minLength": 2, "maxLength": 60, "message": "Tell us your name (2 to 60 characters)." },
+          "email": { "type": "string", "format": "email", "message": "We need a valid email to send the quote." },
+          "age": { "type": "integer", "minimum": 0, "maximum": 120, "message": "Age must be a whole number between 0 and 120." },
+          "smoker": { "type": "boolean" },
+          "alcohol": { "type": "string", "enum": ["none", "social", "frequent"] },
+          "activity": { "type": "string", "enum": ["sedentary", "regular", "extreme"] },
+          "sleep": { "type": "string", "enum": ["normal", "short"] },
+          "dependents": { "type": "integer", "minimum": 0, "maximum": 6, "message": "Up to 6 dependents." },
+          "plan": { "type": "string", "enum": ["essential", "balanced", "complete"] },
+          "billing": { "type": "string", "enum": ["monthly", "annual"] }
+        }
+      },
+      "quote": {
+        "type": "object",
+        "required": ["applicant", "pricing", "status", "quotedUnder"],
+        "properties": {
+          "applicant": { "$ref": "#/schemas/applicant" },
+          "pricing": {
+            "type": "object",
+            "required": ["monthly", "annual", "perPayment"],
+            "properties": {
+              "monthly": { "type": "integer", "minimum": 0 },
+              "annual": { "type": "integer", "minimum": 0 },
+              "perPayment": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "status": { "type": "string", "enum": ["open", "accepted"] },
+          "quotedUnder": { "type": "string", "minLength": 1 },
+          "acceptedAt": { "type": "string" }
+        }
+      },
+      "quote-params": {
+        "type": "object",
+        "required": ["id"],
+        "properties": { "id": { "type": "string", "minLength": 1 } }
+      },
+      "quotes-query": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": { "type": "string", "format": "email", "message": "Search by a valid email." },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      }
+    },
+
+    "endpoints": {
+      "create-quote": {
+        "method": "POST",
+        "path": "/quotes",
+        "description": "Issue a quote. The body is validated with the `applicant` schema, staged under `applicant` (the state path the browser uses) and priced with the same definitions the page shows live. The stored pricing is the server's word.",
+        "input": { "body": "applicant" },
+        "pinned": true,
+        "handler": [
+          { "type": "set", "path": "applicant", "value": { "state": "body" } },
+          {
+            "type": "if",
+            "condition": { "!": [{ "def": "eligible" }] },
+            "then": {
+              "type": "fail",
+              "status": 422,
+              "message": { "def": "eligibilityMessage" },
+              "issues": [{ "obj": { "path": "age", "message": { "def": "eligibilityMessage" } } }]
+            }
+          },
+          {
+            "type": "insert",
+            "collection": "quotes",
+            "data": {
+              "obj": {
+                "applicant": { "state": "applicant" },
+                "pricing": { "def": "pricing" },
+                "status": "open",
+                "quotedUnder": { "context": "version" }
+              }
+            },
+            "as": "quote"
+          },
+          { "type": "respond", "status": 201, "body": { "var": "quote" } }
+        ]
+      },
+
+      "get-quote": {
+        "method": "GET",
+        "path": "/quotes/:id",
+        "input": { "params": "quote-params" },
+        "handler": [
+          { "type": "findOne", "collection": "quotes", "id": { "state": "params.id" }, "as": "quote" },
+          { "type": "if", "condition": { "!": [{ "var": "quote" }] }, "then": { "type": "fail", "status": 404, "message": { "cat": ["No quote with id ", { "state": "params.id" }] } } },
+          { "type": "respond", "body": { "var": "quote" } }
+        ]
+      },
+
+      "find-quotes": {
+        "method": "GET",
+        "path": "/quotes",
+        "description": "Quotes issued to one email, newest first.",
+        "input": { "query": "quotes-query" },
+        "handler": [
+          {
+            "type": "find",
+            "collection": "quotes",
+            "where": { "==": [{ "lower": [{ "var": "item.applicant.email" }] }, { "lower": [{ "trim": [{ "state": "query.email" }] }] }] },
+            "sort": { "createdAt": "desc" },
+            "limit": { "coalesce": [{ "state": "query.limit" }, { "resource": ["settings", "recentLimit"] }] },
+            "as": "items"
+          },
+          { "type": "respond", "body": { "obj": { "items": { "var": "items" }, "total": { "length": [{ "var": "items" }] }, "email": { "state": "query.email" } } } }
+        ]
+      },
+
+      "accept-quote": {
+        "method": "POST",
+        "path": "/quotes/:id/accept",
+        "description": "Turn an open quote into a policy request. Refused when the quote was priced under another document version: the rates may have changed, ask for a fresh quote.",
+        "input": { "params": "quote-params" },
+        "handler": [
+          { "type": "findOne", "collection": "quotes", "id": { "state": "params.id" }, "as": "quote" },
+          { "type": "if", "condition": { "!": [{ "var": "quote" }] }, "then": { "type": "fail", "status": 404, "message": { "cat": ["No quote with id ", { "state": "params.id" }] } } },
+          { "type": "if", "condition": { "==": [{ "var": "quote.status" }, "accepted"] }, "then": { "type": "fail", "status": 409, "message": "This quote was already accepted." } },
+          { "type": "if", "condition": { "!=": [{ "var": "quote.quotedUnder" }, { "context": "version" }] }, "then": { "type": "fail", "status": 409, "message": "Our rates changed since this quote was issued. Please ask for a new one." } },
+          {
+            "type": "patch",
+            "collection": "quotes",
+            "id": { "state": "params.id" },
+            "set": { "status": "accepted", "acceptedAt": { "context": "now" } },
+            "as": "updated"
+          },
+          { "type": "respond", "body": { "first": [{ "var": "updated" }] } }
+        ]
+      },
+
+      "rating-tables": {
+        "method": "GET",
+        "path": "/rating",
+        "description": "The tables the price comes from, as data. What you see is what is charged.",
+        "handler": [
+          {
+            "type": "respond",
+            "body": {
+              "obj": {
+                "version": { "context": "version" },
+                "settings": { "resource": "settings" },
+                "plans": { "resource": "plans" },
+                "ageBands": { "resource": "age-bands" },
+                "riskFactors": { "resource": "risk-factors" }
+              }
+            }
+          }
+        ]
+      },
+
+      "quote-stats": {
+        "method": "GET",
+        "path": "/stats",
+        "description": "Aggregates over every quote. Nothing personal leaves the storage.",
+        "handler": [
+          { "type": "find", "collection": "quotes", "as": "all" },
+          { "type": "count", "collection": "quotes", "where": { "==": [{ "var": "item.status" }, "accepted"] }, "as": "accepted" },
+          {
+            "type": "respond",
+            "body": {
+              "obj": {
+                "total": { "length": [{ "var": "all" }] },
+                "accepted": { "var": "accepted" },
+                "averageMonthly": { "if": [{ "length": [{ "var": "all" }] }, { "round": [{ "/": [{ "sum": [{ "var": "all" }, "pricing.monthly"] }, { "length": [{ "var": "all" }] }] }] }, 0] },
+                "byPlan": {
+                  "obj": {
+                    "essential": { "count": [{ "var": "all" }, { "==": [{ "var": "item.applicant.plan" }, "essential"] }] },
+                    "balanced": { "count": [{ "var": "all" }, { "==": [{ "var": "item.applicant.plan" }, "balanced"] }] },
+                    "complete": { "count": [{ "var": "all" }, { "==": [{ "var": "item.applicant.plan" }, "complete"] }] }
+                  }
+                },
+                "smokers": { "count": [{ "var": "all" }, { "var": "item.applicant.smoker" }] },
+                "generatedAt": { "context": "now" }
+              }
+            }
+          }
+        ]
+      }
+    },
+
+    "state": {
+      "applicant": {
+        "name": "",
+        "email": "",
+        "age": null,
+        "smoker": false,
+        "alcohol": "none",
+        "activity": "regular",
+        "sleep": "normal",
+        "dependents": 0,
+        "plan": "balanced",
+        "billing": "monthly"
+      },
+      "current": null,
+      "search": { "email": "" },
+      "mine": { "items": [], "total": 0, "email": "" },
+      "error": null
+    },
+
+    "definitions": {
+      "ageBand": {
+        "type": "object",
+        "visibility": "private",
+        "description": "Row of the age-bands table for the applicant, or the default row when the age is not insurable.",
+        "logic": { "lookup": ["age-bands", { "obj": { "age": { "state": "applicant.age" } } }] }
+      },
+      "ageFactor": { "type": "number", "logic": { "get": [{ "def": "ageBand" }, "factor"] } },
+      "hasAge": { "type": "boolean", "visibility": "private", "logic": { "!": [{ "isEmpty": [{ "state": "applicant.age" }] }] } },
+      "eligible": {
+        "type": "boolean",
+        "description": "Only ages inside a band can be quoted.",
+        "logic": { "and": [{ "def": "hasAge" }, { "get": [{ "def": "ageBand" }, "eligible"] }] }
+      },
+      "eligibilityMessage": {
+        "type": "string",
+        "logic": { "cat": ["We can only cover people aged ", { "resource": ["settings", "minAge"] }, " to ", { "resource": ["settings", "maxAge"] }, "."] }
+      },
+      "riskRows": {
+        "type": "array",
+        "description": "Every behavior factor that applies to the applicant.",
+        "logic": {
+          "lookup": [
+            "risk-factors",
+            { "obj": { "smoker": { "state": "applicant.smoker" }, "alcohol": { "state": "applicant.alcohol" }, "activity": { "state": "applicant.activity" }, "sleep": { "state": "applicant.sleep" } } }
+          ]
+        }
+      },
+      "riskFactor": {
+        "type": "number",
+        "description": "Product of the applicable behavior factors.",
+        "logic": { "round": [{ "reduce": [{ "def": "riskRows" }, { "*": [{ "var": "accumulator" }, { "var": "current.factor" }] }, 1] }, 4] }
+      },
+      "dependents": {
+        "type": "number",
+        "visibility": "private",
+        "logic": { "clamp": [{ "coalesce": [{ "state": "applicant.dependents" }, 0] }, 0, { "resource": ["settings", "maxDependents"] }] }
+      },
+      "planQuotes": {
+        "type": "array",
+        "description": "Every plan priced for this applicant. The formula lives here once; `monthly` picks the chosen plan.",
+        "logic": {
+          "map": [
+            { "resource": "plans" },
+            {
+              "let": [
+                {
+                  "base": { "var": "plan.monthly" },
+                  "dependentsAmount": { "round": [{ "*": [{ "var": "base" }, { "resource": ["settings", "dependentRate"] }, { "def": "dependents" }] }] },
+                  "subtotal": { "+": [{ "var": "base" }, { "var": "dependentsAmount" }] },
+                  "rated": { "round": [{ "*": [{ "var": "subtotal" }, { "def": "ageFactor" }, { "def": "riskFactor" }] }] }
+                },
+                {
+                  "obj": {
+                    "id": { "var": "plan.id" },
+                    "label": { "var": "plan.label" },
+                    "icon": { "var": "plan.icon" },
+                    "tagline": { "var": "plan.tagline" },
+                    "deductible": { "var": "plan.deductible" },
+                    "base": { "var": "base" },
+                    "dependentsAmount": { "var": "dependentsAmount" },
+                    "subtotal": { "var": "subtotal" },
+                    "monthly": { "if": [{ "def": "eligible" }, { "max": [{ "var": "rated" }, { "resource": ["settings", "minMonthly"] }] }, 0] }
+                  }
+                }
+              ]
+            },
+            "plan"
+          ]
+        }
+      },
+      "selectedPlan": {
+        "type": "object",
+        "visibility": "private",
+        "logic": { "findBy": [{ "def": "planQuotes" }, "id", { "state": "applicant.plan" }] }
+      },
+      "monthly": { "type": "number", "logic": { "coalesce": [{ "get": [{ "def": "selectedPlan" }, "monthly"] }, 0] } },
+      "annualDiscount": {
+        "type": "number",
+        "logic": { "if": [{ "==": [{ "state": "applicant.billing" }, "annual"] }, { "round": [{ "*": [{ "def": "monthly" }, 12, { "resource": ["settings", "annualDiscount"] }] }] }, 0] }
+      },
+      "annual": { "type": "number", "logic": { "-": [{ "*": [{ "def": "monthly" }, 12] }, { "def": "annualDiscount" }] } },
+      "perPayment": {
+        "type": "number",
+        "description": "What one payment costs under the chosen billing.",
+        "logic": { "if": [{ "==": [{ "state": "applicant.billing" }, "annual"] }, { "def": "annual" }, { "def": "monthly" }] }
+      },
+      "pricing": {
+        "type": "object",
+        "description": "The whole breakdown as one value: shown live, stored with the quote, returned by the server.",
+        "logic": {
+          "obj": {
+            "planId": { "state": "applicant.plan" },
+            "planLabel": { "get": [{ "def": "selectedPlan" }, "label"] },
+            "base": { "coalesce": [{ "get": [{ "def": "selectedPlan" }, "base"] }, 0] },
+            "dependents": { "def": "dependents" },
+            "dependentsAmount": { "coalesce": [{ "get": [{ "def": "selectedPlan" }, "dependentsAmount"] }, 0] },
+            "subtotal": { "coalesce": [{ "get": [{ "def": "selectedPlan" }, "subtotal"] }, 0] },
+            "ageBand": { "get": [{ "def": "ageBand" }, "label"] },
+            "ageFactor": { "def": "ageFactor" },
+            "risks": { "def": "riskRows" },
+            "riskFactor": { "def": "riskFactor" },
+            "eligible": { "def": "eligible" },
+            "monthly": { "def": "monthly" },
+            "billing": { "state": "applicant.billing" },
+            "annualDiscount": { "def": "annualDiscount" },
+            "annual": { "def": "annual" },
+            "perPayment": { "def": "perPayment" }
+          }
+        }
+      },
+      "quoteReady": {
+        "type": "boolean",
+        "logic": { "and": [{ "def": "eligible" }, { "!": [{ "context": "busy" }] }] }
+      },
+      "priceLabel": {
+        "type": "string",
+        "logic": {
+          "if": [
+            { "!": [{ "def": "hasAge" }] }, "Enter your age to see a price",
+            { "!": [{ "def": "eligible" }] }, { "def": "eligibilityMessage" },
+            { "==": [{ "state": "applicant.billing" }, "annual"] }, { "cat": [{ "format": [{ "def": "annual" }, "currency"] }, " per year"] },
+            { "cat": [{ "format": [{ "def": "monthly" }, "currency"] }, " per month"] }
+          ]
+        }
+      },
+      "currentStatus": {
+        "type": "object",
+        "visibility": "private",
+        "logic": { "findBy": [{ "resource": "statuses" }, "id", { "state": "current.status" }] }
+      },
+      "canAccept": {
+        "type": "boolean",
+        "logic": { "and": [{ "==": [{ "state": "current.status" }, "open"] }, { "==": [{ "state": "current.quotedUnder" }, { "context": "version" }] }, { "!": [{ "context": "busy" }] }] }
+      },
+      "quoteIsStale": {
+        "type": "boolean",
+        "description": "The quote was priced under another version of this document.",
+        "logic": { "and": [{ "!!": [{ "state": "current" }] }, { "!=": [{ "state": "current.quotedUnder" }, { "context": "version" }] }] }
+      },
+      "mineLabel": {
+        "type": "string",
+        "logic": {
+          "if": [
+            { "isEmpty": [{ "state": "mine.email" }] }, "Search by the email you used.",
+            { "cat": [{ "state": "mine.total" }, " ", { "plural": [{ "state": "mine.total" }, "quote", "quotes"] }, " for ", { "state": "mine.email" }] }
+          ]
+        }
+      }
+    },
+
+    "actions": {
+      "pick-plan": { "type": "set", "path": "applicant.plan", "value": { "var": "plan" } },
+      "request-quote": {
+        "type": "submit",
+        "endpoint": "create-quote",
+        "schema": "applicant",
+        "body": { "state": "applicant" },
+        "then": [
+          { "type": "toast", "title": "Quote issued", "description": { "cat": ["The server priced it at ", { "format": [{ "var": "response.pricing.monthly" }, "currency"] }, " a month."] }, "icon": "i-lucide-file-check", "color": "primary" },
+          { "type": "navigate", "to": "page:quote", "params": { "id": { "var": "response.id" } } }
+        ],
+        "catch": { "type": "toast", "title": "We could not issue the quote", "description": { "var": "error" }, "color": "error", "icon": "i-lucide-triangle-alert" }
+      },
+      "load-quote": {
+        "type": "fetch",
+        "endpoint": "get-quote",
+        "params": { "id": { "context": "params.id" } },
+        "result": "current",
+        "catch": [{ "type": "set", "path": "current", "value": null }, { "type": "set", "path": "error", "value": { "var": "error" } }]
+      },
+      "accept": {
+        "type": "fetch",
+        "endpoint": "accept-quote",
+        "params": { "id": { "state": "current.id" } },
+        "result": "current",
+        "then": { "type": "toast", "title": "Welcome aboard", "description": "Your policy request is in. We will email you the paperwork.", "icon": "i-lucide-badge-check", "color": "success" },
+        "catch": { "type": "toast", "title": "Could not accept the quote", "description": { "var": "error" }, "color": "error", "icon": "i-lucide-triangle-alert" }
+      },
+      "find-mine": {
+        "type": "fetch",
+        "endpoint": "find-quotes",
+        "query": { "email": { "state": "search.email" } },
+        "result": "mine",
+        "catch": { "type": "toast", "title": "Search failed", "description": { "var": "error" }, "color": "error", "icon": "i-lucide-triangle-alert" }
+      },
+      "enter-my-quotes": { "type": "if", "condition": { "!": [{ "isEmpty": [{ "state": "search.email" }] }] }, "then": "find-mine" },
+      "open-quote": { "type": "navigate", "to": "page:quote", "params": { "id": { "var": "quote.id" } } },
+      "start-over": [
+        { "type": "reset", "path": "applicant" },
+        { "type": "navigate", "to": "page:index" }
+      ]
+    },
+
+    "templates": {
+      "component:shell": [
+        {
+          "type": "component",
+          "as": "Header",
+          "props": { "title": "Health Quote", "to": "/", "toggle": false },
+          "slots": {
+            "right": [
+              { "type": "component", "as": "Badge", "props": { "variant": "soft", "color": "neutral", "icon": "i-lucide-database", "label": "sqlite" } },
+              { "type": "component", "as": "Button", "props": { "label": "My quotes", "variant": "ghost", "color": "neutral", "icon": "i-lucide-files", "to": "/quotes" } },
+              { "type": "component", "as": "Button", "props": { "label": "Rating tables", "variant": "ghost", "color": "neutral", "icon": "i-lucide-table", "to": "endpoint:rating-tables", "target": "_blank" } }
+            ]
+          }
+        },
+        { "type": "component", "as": "Main", "children": [{ "type": "outlet" }] },
+        {
+          "type": "component",
+          "as": "Footer",
+          "slots": {
+            "left": [{ "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "content": "Rating tables, pricing, endpoints and pages: one document. The browser prices live; the server prices again with the same definitions before it stores anything." }],
+            "right": [
+              { "type": "component", "as": "Link", "props": { "to": "endpoint:quote-stats", "target": "_blank" }, "content": "stats" },
+              { "type": "component", "as": "Link", "props": { "to": "/api/blueprint/contract", "external": true, "target": "_blank" }, "content": "runtime contract" }
+            ]
+          }
+        }
+      ],
+
+      "component:money-row": [
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "direction": "row", "gap": "sm", "align": "center" },
+          "children": [
+            { "type": "component", "as": "Icon", "if": { "var": "icon" }, "bind": { "name": { "var": "icon" } } },
+            { "type": "component", "as": "Text", "props": { "size": "sm" }, "bind": { "content": { "var": "label" }, "weight": { "if": [{ "var": "strong" }, "semibold", "normal"] } } },
+            { "type": "component", "as": "Spacer" },
+            { "type": "component", "as": "Text", "props": { "size": "sm", "tabular": true }, "bind": { "content": { "var": "value" }, "weight": { "if": [{ "var": "strong" }, "semibold", "normal"] }, "color": { "coalesce": [{ "var": "tone" }, "default"] } } }
+          ]
+        }
+      ],
+
+      "component:price-breakdown": [
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "gap": "sm" },
+          "children": [
+            { "type": "template", "name": "component:money-row", "with": { "label": { "cat": [{ "var": "pricing.planLabel" }, " plan, base premium"] }, "value": { "format": [{ "var": "pricing.base" }, "currency"] } } },
+            {
+              "type": "template",
+              "name": "component:money-row",
+              "if": { ">": [{ "var": "pricing.dependents" }, 0] },
+              "with": {
+                "label": { "cat": [{ "var": "pricing.dependents" }, " ", { "plural": [{ "var": "pricing.dependents" }, "dependent", "dependents"] }, " at ", { "format": [{ "resource": ["settings", "dependentRate"] }, "percent"] }, " each"] },
+                "value": { "cat": ["+ ", { "format": [{ "var": "pricing.dependentsAmount" }, "currency"] }] }
+              }
+            },
+            { "type": "component", "as": "Separator" },
+            { "type": "template", "name": "component:money-row", "with": { "label": { "cat": ["Age ", { "var": "pricing.ageBand" }] }, "value": { "cat": ["× ", { "format": [{ "var": "pricing.ageFactor" }, "number"] }] }, "icon": "i-lucide-cake" } },
+            {
+              "type": "template",
+              "name": "component:money-row",
+              "for": { "in": { "var": "pricing.risks" }, "as": "risk", "key": "id" },
+              "with": {
+                "label": { "var": "risk.label" },
+                "icon": { "var": "risk.icon" },
+                "value": { "cat": ["× ", { "format": [{ "var": "risk.factor" }, "number"] }] },
+                "tone": { "if": [{ "<": [{ "var": "risk.factor" }, 1] }, "success", "warning"] }
+              }
+            },
+            { "type": "component", "as": "Separator" },
+            { "type": "template", "name": "component:money-row", "with": { "label": "Monthly premium", "value": { "format": [{ "var": "pricing.monthly" }, "currency"] }, "strong": true } },
+            {
+              "type": "if",
+              "condition": { "==": [{ "var": "pricing.billing" }, "annual"] },
+              "children": [
+                { "type": "template", "name": "component:money-row", "with": { "label": "Annual billing discount", "value": { "cat": ["− ", { "format": [{ "var": "pricing.annualDiscount" }, "currency"] }] }, "tone": "success" } },
+                { "type": "template", "name": "component:money-row", "with": { "label": "Per year", "value": { "format": [{ "var": "pricing.annual" }, "currency"] }, "strong": true } }
+              ]
+            }
+          ]
+        }
+      ],
+
+      "component:plan-card": [
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "gap": "xs", "padding": "md", "rounded": "lg", "border": true },
+          "bind": { "surface": { "if": [{ "var": "selected" }, "primary", "none"] } },
+          "on": { "click": { "type": "action", "name": "pick-plan", "with": { "plan": { "var": "plan.id" } } } },
+          "children": [
+            {
+              "type": "component",
+              "as": "Stack",
+              "props": { "direction": "row", "gap": "sm", "align": "center" },
+              "children": [
+                { "type": "component", "as": "Icon", "bind": { "name": { "var": "plan.icon" } } },
+                { "type": "component", "as": "Text", "props": { "weight": "semibold" }, "bind": { "content": { "var": "plan.label" } } },
+                { "type": "component", "as": "Spacer" },
+                { "type": "component", "as": "Badge", "if": { "var": "selected" }, "props": { "label": "Chosen", "variant": "solid", "size": "sm", "color": "neutral" } }
+              ]
+            },
+            { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "bind": { "content": { "var": "plan.tagline" } } },
+            { "type": "component", "as": "Text", "props": { "size": "xl", "weight": "bold", "tabular": true }, "bind": { "content": { "if": [{ "var": "plan.monthly" }, { "cat": [{ "format": [{ "var": "plan.monthly" }, "currency"] }, " / mo"] }, "—"] } } },
+            { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "if": [{ "var": "plan.deductible" }, { "cat": [{ "format": [{ "var": "plan.deductible" }, "currency"] }, " deductible"] }, "No deductible"] } } }
+          ]
+        }
+      ],
+
+      "component:quote-summary": [
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "direction": "row", "gap": "md", "align": "center", "wrap": true },
+          "children": [
+            { "type": "component", "as": "Avatar", "props": { "size": "lg" }, "bind": { "text": { "upper": [{ "substr": [{ "var": "quote.applicant.name" }, 0, 2] }] }, "alt": { "var": "quote.applicant.name" } } },
+            {
+              "type": "component",
+              "as": "Stack",
+              "props": { "gap": "none" },
+              "children": [
+                { "type": "component", "as": "Text", "props": { "weight": "semibold" }, "bind": { "content": { "var": "quote.applicant.name" } } },
+                { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "bind": { "content": { "cat": [{ "var": "quote.applicant.age" }, " years old · ", { "var": "quote.pricing.planLabel" }, " plan · ", { "var": "quote.pricing.billing" }, " billing"] } } }
+              ]
+            },
+            { "type": "component", "as": "Spacer" },
+            {
+              "type": "component",
+              "as": "Stack",
+              "props": { "gap": "none", "align": "end" },
+              "children": [
+                { "type": "component", "as": "Text", "props": { "size": "2xl", "weight": "bold", "tabular": true }, "bind": { "content": { "format": [{ "var": "quote.pricing.perPayment" }, "currency"] } } },
+                { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "if": [{ "==": [{ "var": "quote.pricing.billing" }, "annual"] }, "per year", "per month"] } } }
+              ]
+            }
+          ]
+        }
+      ],
+
+      "page:index": {
+        "route": "/",
+        "title": "Get a quote",
+        "description": "Answer a few questions and see your price change as you type.",
+        "children": [
+          {
+            "type": "component",
+            "as": "Container",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "xl", "paddingY": "xl" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "xs" },
+                    "children": [
+                      { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "Your health plan, priced while you type" },
+                      { "type": "component", "as": "Text", "props": { "color": "muted" }, "content": "Age sets the band, habits set the factors, and the plan sets the base. Every table behind the number is public." }
+                    ]
+                  },
+
+                  {
+                    "type": "component",
+                    "as": "Grid",
+                    "props": { "cols": 2, "gap": "lg" },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Form",
+                            "props": { "schema": "applicant", "state": "applicant", "validateOn": ["blur", "change", "input"] },
+                            "on": { "submit": "request-quote" },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "gap": "md" },
+                                "children": [
+                                  { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "About you" },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "name", "label": "Full name", "required": true },
+                                    "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "Ada Lovelace", "icon": "i-lucide-user-round" }, "model": "applicant.name" }]
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Stack",
+                                    "props": { "direction": "row", "gap": "md", "wrap": true },
+                                    "children": [
+                                      {
+                                        "type": "component",
+                                        "as": "Field",
+                                        "props": { "name": "email", "label": "Email", "required": true },
+                                        "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "you@example.com", "type": "email", "icon": "i-lucide-mail" }, "model": "applicant.email" }]
+                                      },
+                                      {
+                                        "type": "component",
+                                        "as": "Field",
+                                        "props": { "name": "age", "label": "Age", "required": true },
+                                        "bind": { "hint": { "cat": [{ "resource": ["settings", "minAge"] }, " to ", { "resource": ["settings", "maxAge"] }] } },
+                                        "children": [{ "type": "component", "as": "NumberInput", "props": { "min": 0, "max": 120, "step": 1 }, "model": "applicant.age" }]
+                                      },
+                                      {
+                                        "type": "component",
+                                        "as": "Field",
+                                        "props": { "name": "dependents", "label": "Dependents" },
+                                        "bind": { "hint": { "cat": ["+", { "format": [{ "resource": ["settings", "dependentRate"] }, "percent"] }, " each"] } },
+                                        "children": [{ "type": "component", "as": "NumberInput", "props": { "min": 0, "step": 1 }, "bind": { "max": { "resource": ["settings", "maxDependents"] } }, "model": "applicant.dependents" }]
+                                      }
+                                    ]
+                                  },
+
+                                  { "type": "component", "as": "Separator" },
+                                  { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Habits" },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "smoker" },
+                                    "children": [{ "type": "component", "as": "Switch", "props": { "label": "I smoke", "description": "Cigarettes, cigars or vaping" }, "model": "applicant.smoker" }]
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "alcohol", "label": "Alcohol" },
+                                    "children": [{ "type": "component", "as": "RadioGroup", "props": { "variant": "card", "orientation": "horizontal", "color": "primary" }, "bind": { "items": { "resource": "alcohol-options" } }, "model": "applicant.alcohol" }]
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "activity", "label": "Physical activity" },
+                                    "children": [{ "type": "component", "as": "RadioGroup", "props": { "variant": "card", "orientation": "horizontal", "color": "primary" }, "bind": { "items": { "resource": "activity-options" } }, "model": "applicant.activity" }]
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "sleep", "label": "Sleep" },
+                                    "children": [{ "type": "component", "as": "RadioGroup", "props": { "variant": "card", "orientation": "horizontal", "color": "primary" }, "bind": { "items": { "resource": "sleep-options" } }, "model": "applicant.sleep" }]
+                                  },
+
+                                  { "type": "component", "as": "Separator" },
+                                  { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Billing" },
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "name": "billing" },
+                                    "children": [{ "type": "component", "as": "RadioGroup", "props": { "variant": "card", "orientation": "horizontal", "color": "primary" }, "bind": { "items": { "resource": "billing-options" } }, "model": "applicant.billing" }]
+                                  },
+
+                                  {
+                                    "type": "component",
+                                    "as": "Button",
+                                    "props": { "label": "Get my quote", "icon": "i-lucide-file-check", "size": "lg", "type": "submit", "block": true },
+                                    "bind": { "disabled": { "!": [{ "def": "quoteReady" }] }, "loading": { "context": "busy" } }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+
+                      {
+                        "type": "component",
+                        "as": "Stack",
+                        "props": { "gap": "lg" },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "xs", "padding": "lg", "rounded": "xl", "surface": "elevated", "border": true },
+                            "children": [
+                              { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "content": "Your price" },
+                              { "type": "component", "as": "Text", "props": { "size": "3xl", "weight": "bold", "tabular": true }, "bind": { "content": { "def": "priceLabel" }, "color": { "if": [{ "def": "eligible" }, "default", "muted"] } } },
+                              { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "if": { "and": [{ "def": "eligible" }, { "==": [{ "state": "applicant.billing" }, "annual"] }] }, "bind": { "content": { "cat": ["That is ", { "format": [{ "def": "monthly" }, "currency"] }, " a month, minus ", { "format": [{ "def": "annualDiscount" }, "currency"] }, " for paying up front."] } } }
+                            ]
+                          },
+
+                          { "type": "component", "as": "Alert", "if": { "and": [{ "def": "hasAge" }, { "!": [{ "def": "eligible" }] }] }, "props": { "color": "warning", "variant": "soft", "icon": "i-lucide-info", "title": "Not insurable at this age" }, "bind": { "description": { "def": "eligibilityMessage" } } },
+
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "sm" },
+                            "children": [
+                              { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Pick a plan" },
+                              {
+                                "type": "component",
+                                "as": "Grid",
+                                "props": { "cols": 3, "gap": "sm" },
+                                "children": [
+                                  {
+                                    "type": "template",
+                                    "name": "component:plan-card",
+                                    "for": { "in": { "def": "planQuotes" }, "as": "plan", "key": "id" },
+                                    "with": { "plan": { "var": "plan" }, "selected": { "==": [{ "var": "plan.id" }, { "state": "applicant.plan" }] } }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+
+                          {
+                            "type": "component",
+                            "as": "Group",
+                            "if": { "def": "eligible" },
+                            "slots": {
+                              "header": [{ "type": "component", "as": "Text", "props": { "weight": "semibold" }, "content": "How we got there" }]
+                            },
+                            "children": [{ "type": "template", "name": "component:price-breakdown", "with": { "pricing": { "def": "pricing" } } }]
+                          },
+
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "xs" },
+                            "children": [
+                              { "type": "component", "as": "Text", "props": { "size": "sm", "weight": "semibold" }, "bind": { "content": { "cat": ["What the ", { "get": [{ "def": "selectedPlan" }, "label"] }, " plan covers"] } } },
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "direction": "row", "gap": "xs", "wrap": true },
+                                "children": [
+                                  { "type": "component", "as": "Badge", "for": { "in": { "get": [{ "findBy": [{ "resource": "plans" }, "id", { "state": "applicant.plan" }] }, "coverage"] }, "as": "item" }, "props": { "variant": "soft", "color": "neutral", "icon": "i-lucide-check" }, "bind": { "label": { "var": "item" } } }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:quote": {
+        "route": "/quotes/:id",
+        "title": "Your quote",
+        "enter": "load-quote",
+        "children": [
+          {
+            "type": "component",
+            "as": "Container",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "lg", "paddingY": "xl" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "direction": "row", "gap": "sm", "wrap": true },
+                    "children": [
+                      { "type": "component", "as": "Button", "props": { "label": "New quote", "variant": "ghost", "color": "neutral", "icon": "i-lucide-arrow-left" }, "on": { "click": "start-over" } },
+                      { "type": "component", "as": "Button", "props": { "label": "My quotes", "variant": "ghost", "color": "neutral", "icon": "i-lucide-files", "to": "/quotes" } }
+                    ]
+                  },
+                  {
+                    "type": "if",
+                    "condition": { "state": "current" },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "slots": {
+                          "header": [
+                            {
+                              "type": "component",
+                              "as": "Stack",
+                              "props": { "direction": "row", "gap": "sm", "align": "center", "wrap": true },
+                              "children": [
+                                { "type": "component", "as": "Heading", "props": { "level": 2 }, "content": "Your quote" },
+                                { "type": "component", "as": "Badge", "props": { "variant": "soft" }, "bind": { "label": { "get": [{ "def": "currentStatus" }, "label"] }, "color": { "get": [{ "def": "currentStatus" }, "color"] }, "icon": { "get": [{ "def": "currentStatus" }, "icon"] } } },
+                                { "type": "component", "as": "Spacer" },
+                                { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "cat": ["issued ", { "format": [{ "state": "current.createdAt" }, "datetime"] }] } } }
+                              ]
+                            }
+                          ],
+                          "footer": [
+                            {
+                              "type": "component",
+                              "as": "Stack",
+                              "props": { "direction": "row", "gap": "sm", "align": "center", "wrap": true },
+                              "children": [
+                                { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "cat": ["Quote ", { "state": "current.id" }, " · priced by the server under document version ", { "state": "current.quotedUnder" }] } } },
+                                { "type": "component", "as": "Spacer" },
+                                { "type": "component", "as": "Button", "if": { "==": [{ "state": "current.status" }, "open"] }, "props": { "label": "Accept this quote", "icon": "i-lucide-badge-check", "color": "primary" }, "bind": { "disabled": { "!": [{ "def": "canAccept" }] }, "loading": { "context": "busy" } }, "on": { "click": "accept" } },
+                                { "type": "component", "as": "Text", "if": { "==": [{ "state": "current.status" }, "accepted"] }, "props": { "size": "sm", "color": "success", "weight": "semibold" }, "bind": { "content": { "cat": ["Accepted ", { "format": [{ "state": "current.acceptedAt" }, "datetime"] }] } } }
+                              ]
+                            }
+                          ]
+                        },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "lg" },
+                            "children": [
+                              { "type": "template", "name": "component:quote-summary", "with": { "quote": { "state": "current" } } },
+                              { "type": "component", "as": "Alert", "if": { "def": "quoteIsStale" }, "props": { "color": "warning", "variant": "soft", "icon": "i-lucide-history", "title": "Our rates changed since this quote", "description": "This quote was priced under an earlier version of the document. It cannot be accepted any more; ask for a new one." } },
+                              { "type": "component", "as": "Separator", "props": { "label": "Breakdown" } },
+                              { "type": "template", "name": "component:price-breakdown", "with": { "pricing": { "state": "current.pricing" } } }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "else": [
+                      { "type": "component", "as": "Empty", "props": { "icon": "i-lucide-file-question", "title": "No such quote" }, "bind": { "description": { "coalesce": [{ "state": "error" }, "This quote does not exist or was never issued."] } } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:my-quotes": {
+        "route": "/quotes",
+        "title": "My quotes",
+        "enter": "enter-my-quotes",
+        "children": [
+          {
+            "type": "component",
+            "as": "Container",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "lg", "paddingY": "xl" },
+                "children": [
+                  { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "My quotes" },
+                  {
+                    "type": "component",
+                    "as": "Form",
+                    "props": { "schema": "quotes-query", "state": "search" },
+                    "on": { "submit": "find-mine" },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Stack",
+                        "props": { "direction": "row", "gap": "sm", "align": "end", "wrap": true },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Field",
+                            "props": { "name": "email", "label": "Email used on the quote" },
+                            "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "you@example.com", "type": "email", "icon": "i-lucide-mail" }, "model": "search.email" }]
+                          },
+                          { "type": "component", "as": "Button", "props": { "label": "Find", "icon": "i-lucide-search", "type": "submit" }, "bind": { "loading": { "context": "busy" } } }
+                        ]
+                      }
+                    ]
+                  },
+                  { "type": "component", "as": "Text", "props": { "color": "muted" }, "bind": { "content": { "def": "mineLabel" } } },
+                  {
+                    "type": "for",
+                    "in": { "state": "mine.items" },
+                    "as": "quote",
+                    "key": "id",
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "props": { "variant": "subtle" },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "sm" },
+                            "children": [
+                              { "type": "template", "name": "component:quote-summary", "with": { "quote": { "var": "quote" } } },
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "direction": "row", "gap": "sm", "align": "center", "wrap": true },
+                                "children": [
+                                  { "type": "component", "as": "Badge", "props": { "variant": "soft", "size": "sm" }, "bind": { "label": { "get": [{ "findBy": [{ "resource": "statuses" }, "id", { "var": "quote.status" }] }, "label"] }, "color": { "get": [{ "findBy": [{ "resource": "statuses" }, "id", { "var": "quote.status" }] }, "color"] } } },
+                                  { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "format": [{ "var": "quote.createdAt" }, "datetime"] } } },
+                                  { "type": "component", "as": "Spacer" },
+                                  { "type": "component", "as": "Button", "props": { "label": "Open", "size": "sm", "variant": "soft", "trailingIcon": "i-lucide-arrow-right" }, "on": { "click": { "type": "action", "name": "open-quote", "with": { "quote": { "var": "quote" } } } } }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    "empty": [
+                      { "type": "component", "as": "Empty", "if": { "!": [{ "isEmpty": [{ "state": "mine.email" }] }] }, "props": { "icon": "i-lucide-file-search", "title": "Nothing under that email", "description": "Get a quote first, then come back here." } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+
+    "tests": [
+      { "name": "no age, no price", "expect": { "eligible": false, "monthly": 0, "quoteReady": false, "priceLabel": "Enter your age to see a price" } },
+      { "name": "a 30 year old who exercises, balanced plan", "state": { "applicant": { "age": 30 } }, "expect": { "ageFactor": 1, "riskFactor": 0.9, "monthly": 19710, "annualDiscount": 0, "annual": 236520, "perPayment": 19710, "eligible": true, "priceLabel": "$197.10 per month" } },
+      { "name": "annual billing takes 8% off", "state": { "applicant": { "age": 30, "billing": "annual" } }, "expect": { "monthly": 19710, "annualDiscount": 18922, "annual": 217598, "perPayment": 217598, "priceLabel": "$2,175.98 per year" } },
+      { "name": "risk factors multiply", "state": { "applicant": { "age": 50, "smoker": true, "alcohol": "frequent", "activity": "extreme", "sleep": "normal", "plan": "essential", "dependents": 2 } }, "expect": { "ageFactor": 1.55, "riskFactor": 2.4375, "monthly": 82854 } },
+      { "name": "the risk rows are named", "state": { "applicant": { "age": 40, "smoker": true, "activity": "sedentary", "sleep": "short" } }, "expect": { "riskFactor": 1.701 } },
+      { "name": "no habit row applies", "state": { "applicant": { "age": 40, "alcohol": "none", "activity": "regular", "sleep": "normal" } }, "expect": { "riskFactor": 0.9 } },
+      { "name": "age band boundaries", "state": { "applicant": { "age": 25 } }, "expect": { "ageFactor": 0.85 } },
+      { "name": "the next band starts at 26", "state": { "applicant": { "age": 26 } }, "expect": { "ageFactor": 1 } },
+      { "name": "under 18 is not insurable", "state": { "applicant": { "age": 17, "name": "Kid", "email": "kid@example.com" } }, "expect": { "eligible": false, "monthly": 0, "quoteReady": false, "priceLabel": "We can only cover people aged 18 to 75." } },
+      { "name": "over 75 is not insurable", "state": { "applicant": { "age": 76 } }, "expect": { "eligible": false, "ageFactor": 0, "monthly": 0 } },
+      { "name": "no plan sells under the floor", "state": { "applicant": { "age": 20, "plan": "essential" } }, "expect": { "monthly": 9900 } },
+      { "name": "every plan is priced for the applicant", "state": { "applicant": { "age": 30 } }, "expect": { "planQuotes": [
+        { "id": "essential", "label": "Essential", "icon": "i-lucide-shield", "tagline": "Covers the unexpected.", "deductible": 250000, "base": 12900, "dependentsAmount": 0, "subtotal": 12900, "monthly": 11610 },
+        { "id": "balanced", "label": "Balanced", "icon": "i-lucide-shield-check", "tagline": "Everyday care, specialists included.", "deductible": 100000, "base": 21900, "dependentsAmount": 0, "subtotal": 21900, "monthly": 19710 },
+        { "id": "complete", "label": "Complete", "icon": "i-lucide-shield-plus", "tagline": "No deductible, nothing left out.", "deductible": 0, "base": 34900, "dependentsAmount": 0, "subtotal": 34900, "monthly": 31410 }
+      ] } },
+      { "name": "dependents are clamped", "state": { "applicant": { "age": 30, "dependents": 9 } }, "expect": { "pricing": { "planId": "balanced", "planLabel": "Balanced", "base": 21900, "dependents": 6, "dependentsAmount": 45990, "subtotal": 67890, "ageBand": "26 to 35", "ageFactor": 1, "risks": [{ "id": "active", "label": "Exercises regularly", "factor": 0.9, "icon": "i-lucide-bike", "tone": "success" }], "riskFactor": 0.9, "eligible": true, "monthly": 61101, "billing": "monthly", "annualDiscount": 0, "annual": 733212, "perPayment": 61101 } } },
+      { "name": "an open quote under the current version can be accepted", "state": { "current": { "status": "open", "quotedUnder": "v1" } }, "context": { "version": "v1" }, "expect": { "canAccept": true, "quoteIsStale": false } },
+      { "name": "a quote priced under another version is stale", "state": { "current": { "status": "open", "quotedUnder": "v0" } }, "context": { "version": "v1" }, "expect": { "canAccept": false, "quoteIsStale": true } },
+      { "name": "describes my quotes", "state": { "mine": { "items": [{ "id": "a" }], "total": 1, "email": "ada@example.com" } }, "expect": { "mineLabel": "1 quote for ada@example.com" } }
+    ]
+  }
+}
