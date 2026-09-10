@@ -1,9 +1,1853 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "../playground/.nuxt/blueprint/schema.json",
+  "id": "01J9RESTAURANTMENUSHOP0001",
   "name": "restaurant-menu-shop",
   "content": {
-    "resources": {},
-    "schemas": {},
-    "templates": {}
+    "meta": {
+      "title": "Ember & Oak Kitchen",
+      "description": "Wood-fired neighborhood kitchen. Browse the menu, build your order and check out — the whole app is one Blueprint document.",
+      "icon": "i-lucide-flame",
+      "layout": "component:shell",
+      "currency": "USD",
+      "locale": "en-US",
+      "theme": { "primary": "orange", "neutral": "stone" },
+      "seo": { "ogTitle": "Ember & Oak Kitchen — order online" }
+    },
+
+    "resources": {
+      "settings": {
+        "type": "constant",
+        "name": "Store settings",
+        "description": "Rates in percent, money in integer cents.",
+        "data": {
+          "taxRate": 8.5,
+          "minimumOrder": 1500,
+          "freeDeliveryOver": 6000,
+          "pickupMinutes": 15,
+          "maxQuantityPerLine": 20,
+          "phone": "+1 (415) 555-0142",
+          "address": "1188 Oak Street, San Francisco"
+        }
+      },
+
+      "categories": {
+        "type": "list",
+        "name": "Menu categories",
+        "data": [
+          { "id": "starters", "label": "Starters", "icon": "i-lucide-salad" },
+          { "id": "wood-fired", "label": "Wood-fired", "icon": "i-lucide-pizza" },
+          { "id": "mains", "label": "Mains", "icon": "i-lucide-flame" },
+          { "id": "sides", "label": "Sides", "icon": "i-lucide-soup" },
+          { "id": "desserts", "label": "Desserts", "icon": "i-lucide-cake-slice" },
+          { "id": "drinks", "label": "Drinks", "icon": "i-lucide-cup-soda" }
+        ]
+      },
+
+      "dietary-tags": {
+        "type": "references",
+        "name": "Dietary tags",
+        "data": [
+          { "id": "vegetarian", "label": "Vegetarian", "icon": "i-lucide-leaf", "color": "success" },
+          { "id": "vegan", "label": "Vegan", "icon": "i-lucide-sprout", "color": "success" },
+          { "id": "gluten-free", "label": "Gluten-free", "icon": "i-lucide-wheat-off", "color": "info" },
+          { "id": "spicy", "label": "Spicy", "icon": "i-lucide-flame", "color": "error" },
+          { "id": "popular", "label": "Popular", "icon": "i-lucide-star", "color": "warning" }
+        ]
+      },
+
+      "modifier-groups": {
+        "type": "list",
+        "name": "Modifier groups",
+        "description": "Reusable option groups. `multiple` groups select an array of option ids; single groups select one id.",
+        "data": [
+          {
+            "id": "pizza-size",
+            "label": "Size",
+            "required": true,
+            "multiple": false,
+            "options": [
+              { "id": "regular", "label": "Regular · 12\"", "priceDelta": 0 },
+              { "id": "large", "label": "Large · 16\"", "priceDelta": 600 }
+            ]
+          },
+          {
+            "id": "pizza-extras",
+            "label": "Extras",
+            "required": false,
+            "multiple": true,
+            "options": [
+              { "id": "extra-mozzarella", "label": "Extra mozzarella", "priceDelta": 250 },
+              { "id": "hot-honey", "label": "Hot honey drizzle", "priceDelta": 150 },
+              { "id": "prosciutto", "label": "Prosciutto", "priceDelta": 400 },
+              { "id": "basil", "label": "Fresh basil", "priceDelta": 0 }
+            ]
+          },
+          {
+            "id": "side-choice",
+            "label": "Choose a side",
+            "required": true,
+            "multiple": false,
+            "options": [
+              { "id": "potatoes", "label": "Duck-fat potatoes", "priceDelta": 0 },
+              { "id": "greens", "label": "Seasonal greens", "priceDelta": 0 },
+              { "id": "focaccia", "label": "Sourdough focaccia", "priceDelta": 200 }
+            ]
+          },
+          {
+            "id": "spice-level",
+            "label": "Spice level",
+            "required": true,
+            "multiple": false,
+            "options": [
+              { "id": "mild", "label": "Mild", "priceDelta": 0 },
+              { "id": "medium", "label": "Medium", "priceDelta": 0 },
+              { "id": "hot", "label": "Hot", "priceDelta": 0 }
+            ]
+          },
+          {
+            "id": "drink-size",
+            "label": "Size",
+            "required": true,
+            "multiple": false,
+            "options": [
+              { "id": "12oz", "label": "12 oz", "priceDelta": 0 },
+              { "id": "20oz", "label": "20 oz", "priceDelta": 150 }
+            ]
+          }
+        ]
+      },
+
+      "products": {
+        "type": "list",
+        "name": "Menu",
+        "description": "Prices in cents. `modifierGroups` reference `modifier-groups` rows by id.",
+        "data": [
+          { "id": "smoked-burrata", "category": "starters", "name": "Smoked burrata", "description": "Oak-smoked burrata, charred stone fruit, basil oil and grilled sourdough.", "price": 1400, "prepMinutes": 8, "tags": ["vegetarian", "popular"], "icon": "i-lucide-egg-fried", "tone": "warning", "modifierGroups": [] },
+          { "id": "charred-broccolini", "category": "starters", "name": "Charred broccolini", "description": "Chili crisp, lemon, toasted almonds.", "price": 1100, "prepMinutes": 8, "tags": ["vegan", "gluten-free", "spicy"], "icon": "i-lucide-leaf", "tone": "success", "modifierGroups": [] },
+          { "id": "sourdough-focaccia", "category": "starters", "name": "Sourdough focaccia", "description": "Rosemary, flaky salt, whipped ricotta on the side.", "price": 800, "prepMinutes": 5, "tags": ["vegetarian"], "icon": "i-lucide-croissant", "tone": "warning", "modifierGroups": [] },
+
+          { "id": "margherita", "category": "wood-fired", "name": "Margherita", "description": "San Marzano tomato, fior di latte, basil. Blistered at 900°F.", "price": 1600, "prepMinutes": 15, "tags": ["vegetarian", "popular"], "icon": "i-lucide-pizza", "tone": "error", "modifierGroups": ["pizza-size", "pizza-extras"] },
+          { "id": "nduja-honey", "category": "wood-fired", "name": "'Nduja & honey", "description": "Spicy Calabrian 'nduja, mozzarella, hot honey, pickled shallot.", "price": 1900, "prepMinutes": 15, "tags": ["spicy", "popular"], "icon": "i-lucide-pizza", "tone": "error", "modifierGroups": ["pizza-size", "pizza-extras"] },
+          { "id": "wild-mushroom", "category": "wood-fired", "name": "Wild mushroom", "description": "Roasted mushrooms, taleggio, thyme, truffle oil. No tomato.", "price": 1850, "prepMinutes": 15, "tags": ["vegetarian"], "icon": "i-lucide-pizza", "tone": "neutral", "modifierGroups": ["pizza-size", "pizza-extras"] },
+
+          { "id": "ember-roasted-chicken", "category": "mains", "name": "Ember-roasted half chicken", "description": "Brined 24h, roasted over embers, salsa verde.", "price": 2400, "prepMinutes": 20, "tags": ["gluten-free", "popular"], "icon": "i-lucide-drumstick", "tone": "warning", "modifierGroups": ["side-choice"] },
+          { "id": "oak-smoked-brisket", "category": "mains", "name": "Oak-smoked brisket", "description": "12-hour brisket, house pickles, grilled bread.", "price": 2800, "prepMinutes": 12, "tags": ["spicy"], "icon": "i-lucide-beef", "tone": "error", "modifierGroups": ["spice-level", "side-choice"] },
+          { "id": "cauliflower-steak", "category": "mains", "name": "Roasted cauliflower steak", "description": "Romesco, capers, golden raisins, pine nuts.", "price": 1900, "prepMinutes": 15, "tags": ["vegan", "gluten-free"], "icon": "i-lucide-sprout", "tone": "success", "modifierGroups": ["side-choice"] },
+
+          { "id": "duck-fat-potatoes", "category": "sides", "name": "Duck-fat potatoes", "description": "Crispy, salty, with garlic aioli.", "price": 700, "prepMinutes": 10, "tags": ["gluten-free", "popular"], "icon": "i-lucide-soup", "tone": "warning", "modifierGroups": [] },
+          { "id": "seasonal-greens", "category": "sides", "name": "Seasonal greens", "description": "Whatever is best at the market today, lemon and olive oil.", "price": 650, "prepMinutes": 5, "tags": ["vegan", "gluten-free"], "icon": "i-lucide-salad", "tone": "success", "modifierGroups": [] },
+
+          { "id": "basque-cheesecake", "category": "desserts", "name": "Burnt Basque cheesecake", "description": "Creamy center, caramelized top, macerated berries.", "price": 900, "prepMinutes": 3, "tags": ["vegetarian", "gluten-free", "popular"], "icon": "i-lucide-cake-slice", "tone": "warning", "modifierGroups": [] },
+          { "id": "olive-oil-cake", "category": "desserts", "name": "Olive oil cake", "description": "Citrus, mascarpone, pistachio crumble.", "price": 800, "prepMinutes": 3, "tags": ["vegetarian"], "icon": "i-lucide-cake", "tone": "success", "modifierGroups": [] },
+
+          { "id": "house-lemonade", "category": "drinks", "name": "House lemonade", "description": "Meyer lemon, thyme, lightly sweet.", "price": 450, "prepMinutes": 2, "tags": ["vegan", "gluten-free"], "icon": "i-lucide-cup-soda", "tone": "warning", "modifierGroups": ["drink-size"] },
+          { "id": "cold-brew", "category": "drinks", "name": "Cold brew", "description": "Slow-steeped 18h. Black or with oat milk.", "price": 500, "prepMinutes": 2, "tags": ["vegan"], "icon": "i-lucide-coffee", "tone": "neutral", "modifierGroups": ["drink-size"] },
+          { "id": "sparkling-water", "category": "drinks", "name": "Sparkling water", "description": "750 ml bottle.", "price": 350, "prepMinutes": 1, "tags": ["vegan", "gluten-free"], "icon": "i-lucide-glass-water", "tone": "info", "modifierGroups": [] }
+        ]
+      },
+
+      "fulfillment-options": {
+        "type": "options",
+        "name": "Fulfillment",
+        "data": [
+          { "id": "pickup", "label": "Pickup", "description": "Ready in about 15 minutes at the counter.", "icon": "i-lucide-store" },
+          { "id": "delivery", "label": "Delivery", "description": "We deliver to nearby zones. Free over $60.", "icon": "i-lucide-bike" }
+        ]
+      },
+
+      "delivery-zones": {
+        "type": "parameter-table",
+        "name": "Delivery zones",
+        "description": "Matched by postal code prefix. First matching row wins; no match falls back to `default`.",
+        "hitPolicy": "first",
+        "default": { "zone": "none", "label": "Outside our delivery area", "fee": 0, "minutes": 0, "deliverable": false },
+        "data": [
+          { "match": { "postalCode": { "prefix": "941" } }, "zone": "downtown", "label": "Downtown", "fee": 399, "minutes": 25, "deliverable": true },
+          { "match": { "postalCode": { "prefix": "942" } }, "zone": "hillside", "label": "Hillside", "fee": 599, "minutes": 35, "deliverable": true },
+          { "match": { "postalCode": { "prefix": "943" } }, "zone": "bayfront", "label": "Bayfront", "fee": 499, "minutes": 30, "deliverable": true }
+        ]
+      },
+
+      "promo-codes": {
+        "type": "parameter-table",
+        "name": "Promo codes",
+        "hitPolicy": "unique",
+        "default": null,
+        "data": [
+          { "match": { "code": "WELCOME10" }, "code": "WELCOME10", "label": "10% off your first order", "type": "percent", "value": 10, "minSubtotal": 2000 },
+          { "match": { "code": "FREESHIP" }, "code": "FREESHIP", "label": "Free delivery", "type": "free-delivery", "value": 0, "minSubtotal": 0 },
+          { "match": { "code": "OAK5" }, "code": "OAK5", "label": "$5 off orders over $30", "type": "fixed", "value": 500, "minSubtotal": 3000 }
+        ]
+      },
+
+      "tip-options": {
+        "type": "options",
+        "name": "Tip presets (percent of subtotal)",
+        "data": [0, 10, 15, 20]
+      },
+
+      "payment-methods": {
+        "type": "options",
+        "name": "Payment methods",
+        "data": [
+          { "id": "card", "label": "Card on pickup / delivery", "description": "Tap, chip or swipe when your order arrives.", "icon": "i-lucide-credit-card" },
+          { "id": "wallet", "label": "Digital wallet", "description": "Apple Pay or Google Pay at the door.", "icon": "i-lucide-wallet" },
+          { "id": "cash", "label": "Cash", "description": "Exact change appreciated.", "icon": "i-lucide-banknote" }
+        ]
+      },
+
+      "opening-hours": {
+        "type": "list",
+        "name": "Opening hours",
+        "data": [
+          { "days": "Tue – Thu", "hours": "17:00 – 22:00" },
+          { "days": "Fri – Sat", "hours": "12:00 – 23:00" },
+          { "days": "Sun", "hours": "12:00 – 21:00" }
+        ]
+      }
+    },
+
+    "schemas": {
+      "cart-line": {
+        "type": "object",
+        "required": ["id", "productId", "quantity"],
+        "properties": {
+          "id": { "type": "number" },
+          "productId": { "type": "string" },
+          "quantity": { "type": "integer", "minimum": 1, "maximum": 20 },
+          "notes": { "type": "string", "maxLength": 120 },
+          "modifiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["group", "priceDelta"],
+              "properties": {
+                "group": { "type": "string" },
+                "label": { "type": "string" },
+                "options": { "type": "string" },
+                "priceDelta": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
+
+      "checkout": {
+        "type": "object",
+        "required": ["customer", "payment"],
+        "properties": {
+          "customer": {
+            "type": "object",
+            "required": ["name", "phone"],
+            "properties": {
+              "name": { "type": "string", "minLength": 2, "maxLength": 80, "message": "Tell us who the order is for" },
+              "phone": { "type": "string", "format": "phone", "message": "We need a phone number in case we have questions" },
+              "email": { "type": "string", "format": "email" }
+            }
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "street": { "type": "string", "minLength": 3, "requiredWhen": { "def": "isDelivery" } },
+              "number": { "type": "string", "minLength": 1, "requiredWhen": { "def": "isDelivery" } },
+              "complement": { "type": "string", "maxLength": 60 },
+              "district": { "type": "string", "minLength": 2, "requiredWhen": { "def": "isDelivery" } },
+              "postalCode": { "type": "string", "format": "postal-code", "requiredWhen": { "def": "isDelivery" }, "message": "Enter the postal code we deliver to" }
+            }
+          },
+          "payment": {
+            "type": "object",
+            "required": ["method"],
+            "properties": {
+              "method": { "type": "string", "enum": ["card", "wallet", "cash"], "message": "Pick how you want to pay" }
+            }
+          },
+          "notes": { "type": "string", "maxLength": 200 }
+        }
+      },
+
+      "order": {
+        "type": "object",
+        "required": ["lines", "fulfillment", "customer", "payment", "totals"],
+        "properties": {
+          "lines": { "type": "array", "minItems": 1, "message": "Your cart is empty" },
+          "fulfillment": { "type": "string", "enum": ["pickup", "delivery"] },
+          "customer": { "type": "object", "required": ["name", "phone"], "properties": { "name": { "type": "string", "minLength": 2 }, "phone": { "type": "string", "format": "phone" } } },
+          "address": { "type": "object" },
+          "payment": { "type": "object" },
+          "promoCode": { "type": "string" },
+          "notes": { "type": "string" },
+          "estimatedMinutes": { "type": "number", "minimum": 0 },
+          "totals": {
+            "type": "object",
+            "required": ["subtotal", "total"],
+            "properties": {
+              "subtotal": { "type": "integer", "minimum": 1500, "message": "Order is below the minimum" },
+              "discount": { "type": "integer", "minimum": 0 },
+              "deliveryFee": { "type": "integer", "minimum": 0 },
+              "tax": { "type": "integer", "minimum": 0 },
+              "tip": { "type": "integer", "minimum": 0 },
+              "total": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+
+    "state": {
+      "ui": {
+        "category": "all",
+        "search": "",
+        "promoInput": "",
+        "draft": null
+      },
+      "cart": {
+        "sequence": 0,
+        "lines": [],
+        "fulfillment": "pickup",
+        "promoCode": "",
+        "tip": 10
+      },
+      "checkout": {
+        "customer": { "name": "", "phone": "", "email": "" },
+        "address": { "street": "", "number": "", "complement": "", "district": "", "postalCode": "" },
+        "payment": { "method": "card" },
+        "notes": ""
+      },
+      "lastOrder": null
+    },
+
+    "definitions": {
+      "settings": {
+        "type": "object",
+        "visibility": "public",
+        "logic": { "resource": "settings" }
+      },
+
+      "filteredProducts": {
+        "type": "array",
+        "visibility": "public",
+        "description": "Menu filtered by the selected category and the search box.",
+        "logic": {
+          "let": [
+            { "category": { "state": "ui.category" }, "search": { "lower": [{ "trim": [{ "state": "ui.search" }] }] } },
+            {
+              "filter": [
+                { "resource": "products" },
+                {
+                  "and": [
+                    { "or": [{ "==": [{ "var": "category" }, "all"] }, { "==": [{ "var": "product.category" }, { "var": "category" }] }] },
+                    {
+                      "or": [
+                        { "isEmpty": [{ "var": "search" }] },
+                        { "in": [{ "var": "search" }, { "lower": [{ "var": "product.name" }] }] },
+                        { "in": [{ "var": "search" }, { "lower": [{ "var": "product.description" }] }] },
+                        { "in": [{ "var": "search" }, { "join": [{ "var": "product.tags" }, " "] }] }
+                      ]
+                    }
+                  ]
+                },
+                "product"
+              ]
+            }
+          ]
+        }
+      },
+
+      "selectedProduct": {
+        "type": "object",
+        "visibility": "public",
+        "description": "Product addressed by the `/product/:id` route.",
+        "logic": { "findBy": [{ "resource": "products" }, "id", { "context": "params.id" }] }
+      },
+
+      "selectedProductModifierGroups": {
+        "type": "array",
+        "visibility": "public",
+        "logic": {
+          "map": [
+            { "coalesce": [{ "get": [{ "def": "selectedProduct" }, "modifierGroups"] }, []] },
+            { "findBy": [{ "resource": "modifier-groups" }, "id", { "var": "groupId" }] },
+            "groupId"
+          ]
+        }
+      },
+
+      "draftModifierSnapshot": {
+        "type": "array",
+        "visibility": "private",
+        "description": "Selected options per group, with labels and price deltas frozen for the cart line.",
+        "logic": {
+          "map": [
+            { "coalesce": [{ "state": "ui.draft.selections" }, []] },
+            {
+              "let": [
+                {
+                  "group": { "findBy": [{ "resource": "modifier-groups" }, "id", { "var": "selection.group" }] },
+                  "chosen": { "filter": [{ "var": "group.options" }, { "in": [{ "var": "option.id" }, { "merge": [{ "var": "selection.option" }] }] }, "option"] }
+                },
+                {
+                  "obj": {
+                    "group": { "var": "group.id" },
+                    "label": { "var": "group.label" },
+                    "options": { "join": [{ "pluck": [{ "var": "chosen" }, "label"] }] },
+                    "priceDelta": { "sum": [{ "var": "chosen" }, "priceDelta"] }
+                  }
+                }
+              ]
+            },
+            "selection"
+          ]
+        }
+      },
+
+      "draftModifierDelta": {
+        "type": "number",
+        "visibility": "public",
+        "logic": { "sum": [{ "def": "draftModifierSnapshot" }, "priceDelta"] }
+      },
+
+      "draftUnitPrice": {
+        "type": "number",
+        "visibility": "public",
+        "logic": { "+": [{ "coalesce": [{ "get": [{ "def": "selectedProduct" }, "price"] }, 0] }, { "def": "draftModifierDelta" }] }
+      },
+
+      "draftTotal": {
+        "type": "number",
+        "visibility": "public",
+        "logic": { "*": [{ "def": "draftUnitPrice" }, { "coalesce": [{ "state": "ui.draft.quantity" }, 1] }] }
+      },
+
+      "draftIsValid": {
+        "type": "boolean",
+        "visibility": "public",
+        "description": "Every required modifier group has a selection.",
+        "logic": {
+          "every": [
+            { "def": "selectedProductModifierGroups" },
+            {
+              "or": [
+                { "!": { "var": "group.required" } },
+                { "!!": { "get": [{ "findBy": [{ "coalesce": [{ "state": "ui.draft.selections" }, []] }, "group", { "var": "group.id" }] }, "option"] } }
+              ]
+            },
+            "group"
+          ]
+        }
+      },
+
+      "draftMatchesExistingLine": {
+        "type": "boolean",
+        "visibility": "private",
+        "logic": {
+          "some": [
+            { "state": "cart.lines" },
+            {
+              "and": [
+                { "==": [{ "var": "line.productId" }, { "state": "ui.draft.productId" }] },
+                { "===": [{ "var": "line.modifiers" }, { "def": "draftModifierSnapshot" }] },
+                { "==": [{ "var": "line.notes" }, { "coalesce": [{ "state": "ui.draft.notes" }, ""] }] }
+              ]
+            },
+            "line"
+          ]
+        }
+      },
+
+      "cartLines": {
+        "type": "array",
+        "visibility": "public",
+        "description": "Cart lines joined with the live product row: unit price = product price + frozen modifier deltas.",
+        "logic": {
+          "map": [
+            { "state": "cart.lines" },
+            {
+              "let": [
+                {
+                  "product": { "findBy": [{ "resource": "products" }, "id", { "var": "line.productId" }] },
+                  "unitPrice": { "+": [{ "get": [{ "var": "product" }, "price"] }, { "sum": [{ "var": "line.modifiers" }, "priceDelta"] }] }
+                },
+                {
+                  "obj": {
+                    "id": { "var": "line.id" },
+                    "productId": { "var": "line.productId" },
+                    "name": { "get": [{ "var": "product" }, "name"] },
+                    "icon": { "get": [{ "var": "product" }, "icon"] },
+                    "tone": { "get": [{ "var": "product" }, "tone"] },
+                    "prepMinutes": { "get": [{ "var": "product" }, "prepMinutes"] },
+                    "quantity": { "var": "line.quantity" },
+                    "modifiers": { "var": "line.modifiers" },
+                    "modifierSummary": { "join": [{ "filter": [{ "pluck": [{ "var": "line.modifiers" }, "options"] }, { "!": { "isEmpty": [{ "var": "" }] } }] }, " · "] },
+                    "notes": { "var": "line.notes" },
+                    "unitPrice": { "var": "unitPrice" },
+                    "total": { "*": [{ "var": "unitPrice" }, { "var": "line.quantity" }] }
+                  }
+                }
+              ]
+            },
+            "line"
+          ]
+        }
+      },
+
+      "cartCount": { "type": "number", "visibility": "public", "logic": { "sum": [{ "state": "cart.lines" }, "quantity"] } },
+      "cartIsEmpty": { "type": "boolean", "visibility": "public", "logic": { "==": [{ "def": "cartCount" }, 0] } },
+      "subtotal": { "type": "number", "visibility": "public", "logic": { "sum": [{ "def": "cartLines" }, "total"] } },
+
+      "isDelivery": { "type": "boolean", "visibility": "public", "logic": { "==": [{ "state": "cart.fulfillment" }, "delivery"] } },
+
+      "promo": {
+        "type": "object",
+        "visibility": "public",
+        "description": "Promo row for the applied code, or null.",
+        "logic": {
+          "if": [
+            { "isEmpty": [{ "state": "cart.promoCode" }] },
+            null,
+            { "lookup": ["promo-codes", { "obj": { "code": { "upper": [{ "trim": [{ "state": "cart.promoCode" }] }] } } }] }
+          ]
+        }
+      },
+
+      "promoStatus": {
+        "type": "string",
+        "visibility": "public",
+        "logic": {
+          "if": [
+            { "isEmpty": [{ "state": "cart.promoCode" }] }, "none",
+            { "!": { "def": "promo" } }, "invalid",
+            { "<": [{ "def": "subtotal" }, { "get": [{ "def": "promo" }, "minSubtotal"] }] }, "below-minimum",
+            "applied"
+          ]
+        }
+      },
+
+      "discount": {
+        "type": "number",
+        "visibility": "public",
+        "logic": {
+          "let": [
+            { "promo": { "def": "promo" }, "subtotal": { "def": "subtotal" } },
+            {
+              "if": [
+                { "!=": [{ "def": "promoStatus" }, "applied"] }, 0,
+                { "==": [{ "var": "promo.type" }, "percent"] }, { "percentOf": [{ "var": "subtotal" }, { "var": "promo.value" }] },
+                { "==": [{ "var": "promo.type" }, "fixed"] }, { "min": [{ "var": "promo.value" }, { "var": "subtotal" }] },
+                0
+              ]
+            }
+          ]
+        }
+      },
+
+      "deliveryZone": {
+        "type": "object",
+        "visibility": "public",
+        "logic": {
+          "if": [
+            { "def": "isDelivery" },
+            { "lookup": ["delivery-zones", { "obj": { "postalCode": { "trim": [{ "state": "checkout.address.postalCode" }] } } }] },
+            null
+          ]
+        }
+      },
+
+      "deliveryFee": {
+        "type": "number",
+        "visibility": "public",
+        "logic": {
+          "if": [
+            { "!": { "def": "isDelivery" } }, 0,
+            { "!": { "get": [{ "def": "deliveryZone" }, "deliverable"] } }, 0,
+            { "and": [{ "==": [{ "def": "promoStatus" }, "applied"] }, { "==": [{ "get": [{ "def": "promo" }, "type"] }, "free-delivery"] }] }, 0,
+            { ">=": [{ "def": "subtotal" }, { "resource": ["settings", "freeDeliveryOver"] }] }, 0,
+            { "get": [{ "def": "deliveryZone" }, "fee"] }
+          ]
+        }
+      },
+
+      "tax": {
+        "type": "number",
+        "visibility": "public",
+        "description": "Tax on the discounted subtotal, rounded half-up to the cent.",
+        "logic": { "percentOf": [{ "-": [{ "def": "subtotal" }, { "def": "discount" }] }, { "resource": ["settings", "taxRate"] }] }
+      },
+
+      "tipAmount": {
+        "type": "number",
+        "visibility": "public",
+        "logic": { "percentOf": [{ "def": "subtotal" }, { "coalesce": [{ "state": "cart.tip" }, 0] }] }
+      },
+
+      "total": {
+        "type": "number",
+        "visibility": "public",
+        "logic": { "+": [{ "-": [{ "def": "subtotal" }, { "def": "discount" }] }, { "def": "deliveryFee" }, { "def": "tax" }, { "def": "tipAmount" }] }
+      },
+
+      "meetsMinimum": { "type": "boolean", "visibility": "public", "logic": { ">=": [{ "def": "subtotal" }, { "resource": ["settings", "minimumOrder"] }] } },
+      "amountToMinimum": { "type": "number", "visibility": "public", "logic": { "max": [0, { "-": [{ "resource": ["settings", "minimumOrder"] }, { "def": "subtotal" }] }] } },
+
+      "estimatedMinutes": {
+        "type": "number",
+        "visibility": "public",
+        "description": "Longest prep time in the cart plus pickup or zone delivery time.",
+        "logic": {
+          "+": [
+            { "max": [0, { "pluck": [{ "def": "cartLines" }, "prepMinutes"] }] },
+            { "if": [{ "def": "isDelivery" }, { "coalesce": [{ "get": [{ "def": "deliveryZone" }, "minutes"] }, 0] }, { "resource": ["settings", "pickupMinutes"] }] }
+          ]
+        }
+      },
+
+      "canCheckout": {
+        "type": "boolean",
+        "visibility": "public",
+        "logic": {
+          "and": [
+            { "!": { "def": "cartIsEmpty" } },
+            { "def": "meetsMinimum" },
+            { "or": [{ "!": { "def": "isDelivery" } }, { "!!": { "get": [{ "def": "deliveryZone" }, "deliverable"] } }] }
+          ]
+        }
+      },
+
+      "checkoutBlockers": {
+        "type": "array",
+        "visibility": "public",
+        "description": "Human reasons the order cannot be placed yet.",
+        "logic": {
+          "filter": [
+            [
+              { "if": [{ "def": "cartIsEmpty" }, "Your cart is empty.", null] },
+              { "if": [{ "and": [{ "!": { "def": "cartIsEmpty" } }, { "!": { "def": "meetsMinimum" } }] }, { "cat": ["Add ", { "format": [{ "def": "amountToMinimum" }, "currency"] }, " more to reach the minimum order."] }, null] },
+              { "if": [{ "and": [{ "def": "isDelivery" }, { "!": { "get": [{ "def": "deliveryZone" }, "deliverable"] } }] }, "Enter a postal code inside our delivery zones (941xx, 942xx, 943xx).", null] }
+            ],
+            { "!!": { "var": "" } }
+          ]
+        }
+      },
+
+      "orderPayload": {
+        "type": "object",
+        "visibility": "public",
+        "description": "Exactly what gets submitted — a snapshot with prices frozen.",
+        "logic": {
+          "obj": {
+            "lines": { "def": "cartLines" },
+            "fulfillment": { "state": "cart.fulfillment" },
+            "customer": { "state": "checkout.customer" },
+            "address": { "if": [{ "def": "isDelivery" }, { "state": "checkout.address" }, null] },
+            "deliveryZone": { "def": "deliveryZone" },
+            "payment": { "state": "checkout.payment" },
+            "promoCode": { "if": [{ "==": [{ "def": "promoStatus" }, "applied"] }, { "state": "cart.promoCode" }, ""] },
+            "notes": { "state": "checkout.notes" },
+            "estimatedMinutes": { "def": "estimatedMinutes" },
+            "totals": {
+              "obj": {
+                "subtotal": { "def": "subtotal" },
+                "discount": { "def": "discount" },
+                "deliveryFee": { "def": "deliveryFee" },
+                "tax": { "def": "tax" },
+                "tip": { "def": "tipAmount" },
+                "total": { "def": "total" }
+              }
+            }
+          }
+        }
+      },
+
+      "lastOrderMatchesRoute": {
+        "type": "boolean",
+        "visibility": "public",
+        "logic": { "and": [{ "!!": { "state": "lastOrder" } }, { "==": [{ "state": "lastOrder.id" }, { "context": "params.id" }] }] }
+      }
+    },
+
+    "actions": {
+      "select-category": { "type": "set", "path": "ui.category", "value": { "var": "category" } },
+
+      "open-product": { "type": "navigate", "to": "page:product", "params": { "id": { "var": "product.id" } } },
+
+      "start-draft": {
+        "type": "set",
+        "path": "ui.draft",
+        "value": {
+          "obj": {
+            "productId": { "context": "params.id" },
+            "quantity": 1,
+            "notes": "",
+            "selections": {
+              "map": [
+                { "def": "selectedProductModifierGroups" },
+                {
+                  "obj": {
+                    "group": { "var": "group.id" },
+                    "option": {
+                      "if": [
+                        { "var": "group.multiple" }, [],
+                        { "var": "group.required" }, { "get": [{ "first": [{ "var": "group.options" }] }, "id"] },
+                        null
+                      ]
+                    }
+                  }
+                },
+                "group"
+              ]
+            }
+          }
+        }
+      },
+
+      "quick-add": [
+        { "type": "increment", "path": "cart.sequence" },
+        {
+          "type": "if",
+          "condition": { "some": [{ "state": "cart.lines" }, { "and": [{ "==": [{ "var": "line.productId" }, { "var": "product.id" }] }, { "==": [{ "length": [{ "var": "line.modifiers" }] }, 0] }, { "isEmpty": [{ "var": "line.notes" }] }] }, "line"] },
+          "then": { "type": "update", "path": "cart.lines", "where": { "and": [{ "==": [{ "var": "item.productId" }, { "var": "product.id" }] }, { "==": [{ "length": [{ "var": "item.modifiers" }] }, 0] }] }, "set": { "quantity": { "min": [{ "+": [{ "var": "item.quantity" }, 1] }, { "resource": ["settings", "maxQuantityPerLine"] }] } } },
+          "else": { "type": "push", "path": "cart.lines", "value": { "obj": { "id": { "state": "cart.sequence" }, "productId": { "var": "product.id" }, "quantity": 1, "modifiers": [], "notes": "" } } }
+        },
+        { "type": "toast", "title": { "cat": [{ "var": "product.name" }, " added to your cart"] }, "icon": "i-lucide-shopping-bag", "color": "success" }
+      ],
+
+      "add-to-cart": {
+        "type": "if",
+        "condition": { "!": { "def": "draftIsValid" } },
+        "then": { "type": "toast", "title": "Choose the required options first", "color": "warning", "icon": "i-lucide-circle-alert" },
+        "else": [
+          {
+            "type": "if",
+            "condition": { "def": "draftMatchesExistingLine" },
+            "then": {
+              "type": "update",
+              "path": "cart.lines",
+              "where": {
+                "and": [
+                  { "==": [{ "var": "item.productId" }, { "state": "ui.draft.productId" }] },
+                  { "===": [{ "var": "item.modifiers" }, { "def": "draftModifierSnapshot" }] },
+                  { "==": [{ "var": "item.notes" }, { "coalesce": [{ "state": "ui.draft.notes" }, ""] }] }
+                ]
+              },
+              "set": { "quantity": { "min": [{ "+": [{ "var": "item.quantity" }, { "state": "ui.draft.quantity" }] }, { "resource": ["settings", "maxQuantityPerLine"] }] } }
+            },
+            "else": [
+              { "type": "increment", "path": "cart.sequence" },
+              {
+                "type": "push",
+                "path": "cart.lines",
+                "value": {
+                  "obj": {
+                    "id": { "state": "cart.sequence" },
+                    "productId": { "state": "ui.draft.productId" },
+                    "quantity": { "state": "ui.draft.quantity" },
+                    "modifiers": { "def": "draftModifierSnapshot" },
+                    "notes": { "coalesce": [{ "state": "ui.draft.notes" }, ""] }
+                  }
+                }
+              }
+            ]
+          },
+          { "type": "toast", "title": { "cat": [{ "get": [{ "def": "selectedProduct" }, "name"] }, " added to your cart"] }, "description": { "cat": [{ "state": "ui.draft.quantity" }, " × ", { "format": [{ "def": "draftUnitPrice" }, "currency"] }] }, "icon": "i-lucide-shopping-bag", "color": "success" },
+          { "type": "navigate", "to": "page:index" }
+        ]
+      },
+
+      "increment-line": {
+        "type": "update",
+        "path": "cart.lines",
+        "where": { "==": [{ "var": "item.id" }, { "var": "line.id" }] },
+        "set": { "quantity": { "min": [{ "+": [{ "var": "item.quantity" }, 1] }, { "resource": ["settings", "maxQuantityPerLine"] }] } }
+      },
+
+      "decrement-line": {
+        "type": "if",
+        "condition": { "<=": [{ "var": "line.quantity" }, 1] },
+        "then": "remove-line",
+        "else": { "type": "update", "path": "cart.lines", "where": { "==": [{ "var": "item.id" }, { "var": "line.id" }] }, "set": { "quantity": { "-": [{ "var": "item.quantity" }, 1] } } }
+      },
+
+      "remove-line": [
+        { "type": "remove", "path": "cart.lines", "where": { "==": [{ "var": "item.id" }, { "var": "line.id" }] } },
+        { "type": "toast", "title": { "cat": ["Removed ", { "var": "line.name" }] }, "color": "neutral", "icon": "i-lucide-trash-2" }
+      ],
+
+      "clear-cart": [
+        { "type": "reset", "path": "cart" },
+        { "type": "set", "path": "ui.promoInput", "value": "" },
+        { "type": "toast", "title": "Cart cleared", "color": "neutral" }
+      ],
+
+      "apply-promo": [
+        { "type": "set", "path": "cart.promoCode", "value": { "upper": [{ "trim": [{ "state": "ui.promoInput" }] }] } },
+        {
+          "type": "if",
+          "condition": { "==": [{ "def": "promoStatus" }, "applied"] },
+          "then": { "type": "toast", "title": { "cat": [{ "get": [{ "def": "promo" }, "label"] }, " applied"] }, "color": "success", "icon": "i-lucide-ticket-percent" },
+          "else": {
+            "type": "if",
+            "condition": { "==": [{ "def": "promoStatus" }, "below-minimum"] },
+            "then": { "type": "toast", "title": "Almost there", "description": { "cat": ["This code needs a subtotal of ", { "format": [{ "get": [{ "def": "promo" }, "minSubtotal"] }, "currency"] }] }, "color": "warning" },
+            "else": [
+              { "type": "toast", "title": "That code is not valid", "color": "error", "icon": "i-lucide-circle-x" },
+              { "type": "set", "path": "cart.promoCode", "value": "" }
+            ]
+          }
+        }
+      ],
+
+      "remove-promo": [
+        { "type": "set", "path": "cart.promoCode", "value": "" },
+        { "type": "set", "path": "ui.promoInput", "value": "" }
+      ],
+
+      "set-tip": { "type": "set", "path": "cart.tip", "value": { "var": "tip" } },
+
+      "guard-checkout": {
+        "type": "if",
+        "condition": { "!": { "def": "canCheckout" } },
+        "then": [
+          { "type": "toast", "title": "Finish your cart first", "description": { "join": [{ "def": "checkoutBlockers" }, " "] }, "color": "warning" },
+          { "type": "navigate", "to": "page:cart" }
+        ]
+      },
+
+      "place-order": {
+        "type": "submit",
+        "schema": "order",
+        "body": { "def": "orderPayload" },
+        "result": "lastOrder",
+        "then": [
+          { "type": "reset", "path": "cart" },
+          { "type": "set", "path": "ui.promoInput", "value": "" },
+          { "type": "toast", "title": "Order received", "description": "We are firing up the oven.", "color": "success", "icon": "i-lucide-chef-hat" },
+          { "type": "navigate", "to": "page:order-confirmed", "params": { "id": { "var": "response.id" } } }
+        ],
+        "catch": [
+          { "type": "toast", "title": "We could not place your order", "description": { "coalesce": [{ "get": [{ "first": [{ "var": "issues" }] }, "message"] }, { "var": "error" }, "Please try again."] }, "color": "error", "icon": "i-lucide-circle-x" }
+        ]
+      }
+    },
+
+    "templates": {
+      "component:shell": [
+        {
+          "type": "component",
+          "as": "Header",
+          "props": { "title": "Ember & Oak", "to": "/", "toggle": false },
+          "slots": {
+            "right": [
+              { "type": "component", "as": "Button", "props": { "label": "Menu", "variant": "ghost", "color": "neutral", "icon": "i-lucide-utensils", "to": "/" } },
+              {
+                "type": "component",
+                "as": "Chip",
+                "props": { "color": "primary", "size": "3xl", "inset": true },
+                "bind": { "text": { "def": "cartCount" }, "show": { "!": { "def": "cartIsEmpty" } } },
+                "children": [
+                  { "type": "component", "as": "Button", "props": { "label": "Cart", "variant": "soft", "color": "primary", "icon": "i-lucide-shopping-bag", "to": "/cart" } }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "component",
+          "as": "Main",
+          "children": [
+            {
+              "type": "component",
+              "as": "Container",
+              "children": [
+                { "type": "component", "as": "Stack", "props": { "gap": "lg", "paddingY": "lg" }, "children": [{ "type": "outlet" }] }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "component",
+          "as": "Footer",
+          "slots": {
+            "left": [
+              { "type": "component", "as": "Stack", "props": { "gap": "xs" }, "children": [
+                { "type": "component", "as": "Text", "props": { "size": "sm", "weight": "semibold" }, "content": "Ember & Oak Kitchen" },
+                { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "cat": [{ "resource": ["settings", "address"] }, " · ", { "resource": ["settings", "phone"] }] } } }
+              ] }
+            ],
+            "right": [
+              { "type": "component", "as": "Stack", "props": { "gap": "xs", "align": "end" }, "children": [
+                { "type": "for", "in": { "resource": "opening-hours" }, "as": "slot", "key": "days", "children": [
+                  { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted", "tabular": true }, "bind": { "content": { "cat": [{ "var": "slot.days" }, "  ", { "var": "slot.hours" }] } } }
+                ] },
+                { "type": "component", "as": "Badge", "props": { "variant": "subtle", "color": "neutral", "size": "sm", "icon": "i-lucide-file-json" }, "bind": { "label": { "cat": ["document ", { "substr": [{ "context": "version" }, 0, 8] }] } } }
+              ] }
+            ]
+          }
+        }
+      ],
+
+      "component:total-row": [
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "direction": "row", "justify": "between", "align": "baseline", "gap": "md" },
+          "children": [
+            { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "bind": { "content": { "var": "label" } } },
+            { "type": "component", "as": "Text", "props": { "size": "sm", "tabular": true }, "bind": { "content": { "if": [{ "var": "negative" }, { "cat": ["− ", { "format": [{ "var": "value" }, "currency"] }] }, { "format": [{ "var": "value" }, "currency"] }] } } }
+          ]
+        }
+      ],
+
+      "component:order-totals": [
+        { "type": "template", "name": "component:total-row", "with": { "label": "Subtotal", "value": { "def": "subtotal" } } },
+        { "type": "if", "condition": { ">": [{ "def": "discount" }, 0] }, "children": [
+          { "type": "template", "name": "component:total-row", "with": { "label": { "cat": ["Discount · ", { "state": "cart.promoCode" }] }, "value": { "def": "discount" }, "negative": true } }
+        ] },
+        { "type": "if", "condition": { "and": [{ "def": "isDelivery" }, { "get": [{ "def": "deliveryZone" }, "deliverable"] }] }, "children": [
+          { "type": "template", "name": "component:total-row", "with": { "label": { "if": [{ "==": [{ "def": "deliveryFee" }, 0] }, "Delivery · free", { "cat": ["Delivery · ", { "get": [{ "def": "deliveryZone" }, "label"] }] }] }, "value": { "def": "deliveryFee" } } }
+        ] },
+        { "type": "template", "name": "component:total-row", "with": { "label": { "cat": ["Tax · ", { "resource": ["settings", "taxRate"] }, "%"] }, "value": { "def": "tax" } } },
+        { "type": "if", "condition": { ">": [{ "def": "tipAmount" }, 0] }, "children": [
+          { "type": "template", "name": "component:total-row", "with": { "label": { "cat": ["Tip · ", { "state": "cart.tip" }, "%"] }, "value": { "def": "tipAmount" } } }
+        ] },
+        { "type": "component", "as": "Separator" },
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "direction": "row", "justify": "between", "align": "baseline" },
+          "children": [
+            { "type": "component", "as": "Text", "props": { "weight": "semibold" }, "content": "Total" },
+            { "type": "component", "as": "Text", "props": { "size": "xl", "weight": "bold", "tabular": true }, "bind": { "content": { "format": [{ "def": "total" }, "currency"] } } }
+          ]
+        }
+      ],
+
+      "component:product-card": [
+        {
+          "type": "component",
+          "as": "Group",
+          "props": { "variant": "subtle" },
+          "children": [
+            {
+              "type": "component",
+              "as": "Stack",
+              "props": { "gap": "sm" },
+              "children": [
+                { "type": "component", "as": "Image", "props": { "ratio": "video", "rounded": "md", "size": "lg" }, "bind": { "icon": { "var": "product.icon" }, "tone": { "var": "product.tone" }, "alt": { "var": "product.name" } } },
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": { "direction": "row", "justify": "between", "align": "start", "gap": "sm" },
+                  "children": [
+                    { "type": "component", "as": "Heading", "props": { "level": 4 }, "bind": { "content": { "var": "product.name" } } },
+                    { "type": "component", "as": "Text", "props": { "weight": "semibold", "tabular": true }, "bind": { "content": { "format": [{ "var": "product.price" }, "currency"] } } }
+                  ]
+                },
+                { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted", "clamp": 2 }, "bind": { "content": { "var": "product.description" } } },
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": { "direction": "row", "wrap": true, "gap": "xs" },
+                  "children": [
+                    {
+                      "type": "for",
+                      "in": { "filter": [{ "resource": "dietary-tags" }, { "in": [{ "var": "tag.id" }, { "var": "product.tags" }] }, "tag"] },
+                      "as": "tag",
+                      "key": "id",
+                      "children": [
+                        { "type": "component", "as": "Badge", "props": { "variant": "subtle", "size": "sm" }, "bind": { "label": { "var": "tag.label" }, "icon": { "var": "tag.icon" }, "color": { "var": "tag.color" } } }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "component",
+                  "as": "Stack",
+                  "props": { "direction": "row", "justify": "between", "align": "center", "gap": "sm" },
+                  "children": [
+                    { "type": "component", "as": "Text", "props": { "size": "xs", "color": "dimmed" }, "bind": { "content": { "cat": ["~", { "var": "product.prepMinutes" }, " min"] } } },
+                    {
+                      "type": "if",
+                      "condition": { ">": [{ "length": [{ "var": "product.modifierGroups" }] }, 0] },
+                      "children": [
+                        { "type": "component", "as": "Button", "props": { "label": "Customize", "icon": "i-lucide-sliders-horizontal", "size": "sm", "variant": "solid" }, "on": { "click": "open-product" } }
+                      ],
+                      "else": [
+                        { "type": "component", "as": "Button", "props": { "label": "Add", "icon": "i-lucide-plus", "size": "sm", "variant": "solid" }, "on": { "click": "quick-add" } }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+
+      "page:index": {
+        "route": "/",
+        "title": "Menu",
+        "description": "Wood-fired pizza, ember-roasted mains and market sides. Order for pickup or delivery.",
+        "children": [
+          {
+            "type": "component",
+            "as": "Stack",
+            "props": { "gap": "sm" },
+            "children": [
+              { "type": "component", "as": "Text", "props": { "size": "sm", "weight": "medium", "color": "primary" }, "content": "Wood-fired · Open tonight" },
+              { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "What are you hungry for?" },
+              { "type": "component", "as": "Text", "props": { "color": "muted", "size": "lg" }, "bind": { "content": { "meta": "description" } } }
+            ]
+          },
+          {
+            "type": "component",
+            "as": "Stack",
+            "props": { "direction": "row", "responsive": true, "justify": "between", "align": "center", "gap": "md", "sticky": "top", "surface": "elevated", "padding": "sm", "rounded": "lg", "border": true },
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "direction": "row", "wrap": true, "gap": "xs" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Button",
+                    "props": { "label": "All", "size": "sm", "icon": "i-lucide-layout-grid" },
+                    "bind": { "variant": { "if": [{ "==": [{ "state": "ui.category" }, "all"] }, "solid", "ghost"] }, "color": { "if": [{ "==": [{ "state": "ui.category" }, "all"] }, "primary", "neutral"] } },
+                    "on": { "click": { "type": "set", "path": "ui.category", "value": "all" } }
+                  },
+                  {
+                    "type": "for",
+                    "in": { "resource": "categories" },
+                    "as": "category",
+                    "key": "id",
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Button",
+                        "props": { "size": "sm" },
+                        "bind": {
+                          "label": { "var": "category.label" },
+                          "icon": { "var": "category.icon" },
+                          "variant": { "if": [{ "==": [{ "state": "ui.category" }, { "var": "category.id" }] }, "solid", "ghost"] },
+                          "color": { "if": [{ "==": [{ "state": "ui.category" }, { "var": "category.id" }] }, "primary", "neutral"] }
+                        },
+                        "on": { "click": { "type": "action", "name": "select-category", "with": { "category": { "var": "category.id" } } } }
+                      }
+                    ]
+                  }
+                ]
+              },
+              { "type": "component", "as": "Input", "props": { "placeholder": "Search the menu…", "icon": "i-lucide-search", "size": "md" }, "model": "ui.search" }
+            ]
+          },
+          {
+            "type": "if",
+            "condition": { "==": [{ "length": [{ "def": "filteredProducts" }] }, 0] },
+            "children": [
+              {
+                "type": "component",
+                "as": "Empty",
+                "props": { "icon": "i-lucide-search-x", "title": "Nothing matches", "description": "Try another word or clear the filters." },
+                "slots": {
+                  "actions": [
+                    { "type": "component", "as": "Button", "props": { "label": "Clear filters", "variant": "outline", "color": "neutral" }, "on": { "click": [{ "type": "set", "path": "ui.search", "value": "" }, { "type": "set", "path": "ui.category", "value": "all" }] } }
+                  ]
+                }
+              }
+            ],
+            "else": [
+              {
+                "type": "component",
+                "as": "Grid",
+                "props": { "cols": 3, "gap": "md" },
+                "children": [
+                  {
+                    "type": "for",
+                    "in": { "def": "filteredProducts" },
+                    "as": "product",
+                    "key": "id",
+                    "children": [{ "type": "template", "name": "component:product-card" }]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:product": {
+        "route": "/product/:id",
+        "title": "Customize",
+        "enter": "start-draft",
+        "children": [
+          {
+            "type": "if",
+            "condition": { "!": { "def": "selectedProduct" } },
+            "children": [
+              {
+                "type": "component",
+                "as": "Empty",
+                "props": { "icon": "i-lucide-utensils-crossed", "title": "This dish is not on the menu", "description": "It may have been removed in a newer version of the menu." },
+                "slots": { "actions": [{ "type": "component", "as": "Button", "props": { "label": "Back to the menu", "to": "/" } }] }
+              }
+            ],
+            "else": [
+              { "type": "component", "as": "Button", "props": { "label": "Back to the menu", "icon": "i-lucide-arrow-left", "variant": "link", "color": "neutral", "to": "/" } },
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "direction": "row", "responsive": true, "gap": "xl", "align": "start" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "md", "width": "md" },
+                    "children": [
+                      { "type": "component", "as": "Image", "props": { "ratio": "square", "rounded": "xl", "size": "lg" }, "bind": { "icon": { "get": [{ "def": "selectedProduct" }, "icon"] }, "tone": { "get": [{ "def": "selectedProduct" }, "tone"] } } },
+                      { "type": "component", "as": "Heading", "props": { "level": 1 }, "bind": { "content": { "get": [{ "def": "selectedProduct" }, "name"] } } },
+                      { "type": "component", "as": "Text", "props": { "color": "muted" }, "bind": { "content": { "get": [{ "def": "selectedProduct" }, "description"] } } },
+                      {
+                        "type": "component",
+                        "as": "Stack",
+                        "props": { "direction": "row", "wrap": true, "gap": "xs" },
+                        "children": [
+                          {
+                            "type": "for",
+                            "in": { "filter": [{ "resource": "dietary-tags" }, { "in": [{ "var": "tag.id" }, { "get": [{ "def": "selectedProduct" }, "tags"] }] }, "tag"] },
+                            "as": "tag",
+                            "key": "id",
+                            "children": [{ "type": "component", "as": "Badge", "props": { "variant": "subtle" }, "bind": { "label": { "var": "tag.label" }, "icon": { "var": "tag.icon" }, "color": { "var": "tag.color" } } }]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "lg", "grow": true },
+                    "children": [
+                      {
+                        "type": "for",
+                        "in": { "def": "selectedProductModifierGroups" },
+                        "as": "group",
+                        "key": "id",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Group",
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": { "size": "lg" },
+                                "bind": {
+                                  "label": { "var": "group.label" },
+                                  "required": { "var": "group.required" },
+                                  "hint": { "if": [{ "var": "group.multiple" }, "Pick any", "Pick one"] }
+                                },
+                                "children": [
+                                  {
+                                    "type": "if",
+                                    "condition": { "var": "group.multiple" },
+                                    "children": [
+                                      {
+                                        "type": "component",
+                                        "as": "CheckboxGroup",
+                                        "props": { "variant": "card", "color": "primary" },
+                                        "bind": { "items": { "map": [{ "var": "group.options" }, { "obj": { "value": { "var": "option.id" }, "label": { "var": "option.label" }, "description": { "if": [{ ">": [{ "var": "option.priceDelta" }, 0] }, { "cat": ["+ ", { "format": [{ "var": "option.priceDelta" }, "currency"] }] }, "Included"] } } }, "option"] } },
+                                        "model": "ui.draft.selections.{index}.option"
+                                      }
+                                    ],
+                                    "else": [
+                                      {
+                                        "type": "component",
+                                        "as": "RadioGroup",
+                                        "props": { "variant": "card", "color": "primary", "orientation": "horizontal" },
+                                        "bind": { "items": { "map": [{ "var": "group.options" }, { "obj": { "value": { "var": "option.id" }, "label": { "var": "option.label" }, "description": { "if": [{ ">": [{ "var": "option.priceDelta" }, 0] }, { "cat": ["+ ", { "format": [{ "var": "option.priceDelta" }, "currency"] }] }, "Included"] } } }, "option"] } },
+                                        "model": "ui.draft.selections.{index}.option"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "md" },
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": { "label": "Quantity", "size": "lg" },
+                                "children": [
+                                  { "type": "component", "as": "NumberInput", "props": { "min": 1, "step": 1, "size": "lg" }, "bind": { "max": { "resource": ["settings", "maxQuantityPerLine"] } }, "model": "ui.draft.quantity" }
+                                ]
+                              },
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": { "label": "Special requests", "hint": "Optional", "size": "lg" },
+                                "children": [
+                                  { "type": "component", "as": "Textarea", "props": { "placeholder": "Allergies, no onions, extra crispy…", "rows": 2, "autoresize": true, "maxlength": 120 }, "model": "ui.draft.notes" }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Stack",
+                        "props": { "direction": "row", "justify": "between", "align": "center", "gap": "md", "surface": "muted", "padding": "md", "rounded": "lg", "sticky": "bottom" },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "none" },
+                            "children": [
+                              { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "cat": [{ "format": [{ "def": "draftUnitPrice" }, "currency"] }, " each"] } } },
+                              { "type": "component", "as": "Text", "props": { "size": "2xl", "weight": "bold", "tabular": true }, "bind": { "content": { "format": [{ "def": "draftTotal" }, "currency"] } } }
+                            ]
+                          },
+                          {
+                            "type": "component",
+                            "as": "Button",
+                            "props": { "size": "xl", "icon": "i-lucide-shopping-bag" },
+                            "bind": { "label": { "cat": ["Add ", { "state": "ui.draft.quantity" }, " to cart"] }, "disabled": { "!": { "def": "draftIsValid" } } },
+                            "on": { "click": "add-to-cart" }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:cart": {
+        "route": "/cart",
+        "title": "Your cart",
+        "children": [
+          {
+            "type": "component",
+            "as": "Stack",
+            "props": { "direction": "row", "justify": "between", "align": "baseline" },
+            "children": [
+              { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "Your cart" },
+              { "type": "if", "condition": { "!": { "def": "cartIsEmpty" } }, "children": [
+                { "type": "component", "as": "Button", "props": { "label": "Clear", "variant": "ghost", "color": "neutral", "icon": "i-lucide-trash-2", "size": "sm" }, "on": { "click": "clear-cart" } }
+              ] }
+            ]
+          },
+          {
+            "type": "if",
+            "condition": { "def": "cartIsEmpty" },
+            "children": [
+              {
+                "type": "component",
+                "as": "Empty",
+                "props": { "icon": "i-lucide-shopping-bag", "title": "Your cart is empty", "description": "The oven is hot. Add something from the menu." },
+                "slots": { "actions": [{ "type": "component", "as": "Button", "props": { "label": "Browse the menu", "to": "/", "icon": "i-lucide-utensils" } }] }
+              }
+            ],
+            "else": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "direction": "row", "responsive": true, "gap": "xl", "align": "start" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "md", "grow": true },
+                    "children": [
+                      {
+                        "type": "for",
+                        "in": { "def": "cartLines" },
+                        "as": "line",
+                        "key": "id",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Group",
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "direction": "row", "gap": "md", "align": "center" },
+                                "children": [
+                                  { "type": "component", "as": "Image", "props": { "ratio": "square", "rounded": "md", "size": "sm", "width": "sm" }, "bind": { "icon": { "var": "line.icon" }, "tone": { "var": "line.tone" } } },
+                                  {
+                                    "type": "component",
+                                    "as": "Stack",
+                                    "props": { "gap": "xs", "grow": true },
+                                    "children": [
+                                      { "type": "component", "as": "Text", "props": { "weight": "semibold" }, "bind": { "content": { "var": "line.name" } } },
+                                      { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted" }, "if": { "!": { "isEmpty": [{ "var": "line.modifierSummary" }] } }, "bind": { "content": { "var": "line.modifierSummary" } } },
+                                      { "type": "component", "as": "Text", "props": { "size": "sm", "color": "dimmed", "italic": true }, "if": { "!": { "isEmpty": [{ "var": "line.notes" }] } }, "bind": { "content": { "cat": ["“", { "var": "line.notes" }, "”"] } } },
+                                      { "type": "component", "as": "Text", "props": { "size": "xs", "color": "dimmed" }, "bind": { "content": { "cat": [{ "format": [{ "var": "line.unitPrice" }, "currency"] }, " each"] } } }
+                                    ]
+                                  },
+                                  {
+                                    "type": "component",
+                                    "as": "Stack",
+                                    "props": { "direction": "row", "gap": "xs", "align": "center" },
+                                    "children": [
+                                      { "type": "component", "as": "Button", "props": { "icon": "i-lucide-minus", "size": "sm", "color": "neutral", "variant": "outline", "square": true }, "on": { "click": "decrement-line" } },
+                                      { "type": "component", "as": "Text", "props": { "weight": "semibold", "tabular": true, "align": "center", "as": "span" }, "bind": { "content": { "var": "line.quantity" } } },
+                                      { "type": "component", "as": "Button", "props": { "icon": "i-lucide-plus", "size": "sm", "color": "neutral", "variant": "outline", "square": true }, "bind": { "disabled": { ">=": [{ "var": "line.quantity" }, { "resource": ["settings", "maxQuantityPerLine"] }] } }, "on": { "click": "increment-line" } }
+                                    ]
+                                  },
+                                  { "type": "component", "as": "Text", "props": { "weight": "bold", "tabular": true, "align": "right" }, "bind": { "content": { "format": [{ "var": "line.total" }, "currency"] } } },
+                                  { "type": "component", "as": "Button", "props": { "icon": "i-lucide-x", "size": "sm", "color": "error", "variant": "ghost", "square": true }, "on": { "click": "remove-line" } }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "md" },
+                            "children": [
+                              { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "How do you want it?" },
+                              {
+                                "type": "component",
+                                "as": "RadioGroup",
+                                "props": { "variant": "card", "orientation": "horizontal", "color": "primary" },
+                                "bind": { "items": { "map": [{ "resource": "fulfillment-options" }, { "obj": { "value": { "var": "option.id" }, "label": { "var": "option.label" }, "description": { "var": "option.description" } } }, "option"] } },
+                                "model": "cart.fulfillment"
+                              },
+                              {
+                                "type": "if",
+                                "condition": { "def": "isDelivery" },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "Field",
+                                    "props": { "label": "Delivery postal code", "hint": "We deliver to 941xx, 942xx and 943xx" },
+                                    "children": [
+                                      { "type": "component", "as": "Input", "props": { "placeholder": "94110", "icon": "i-lucide-map-pin" }, "model": "checkout.address.postalCode" }
+                                    ]
+                                  },
+                                  {
+                                    "type": "if",
+                                    "condition": { "get": [{ "def": "deliveryZone" }, "deliverable"] },
+                                    "children": [
+                                      { "type": "component", "as": "Alert", "props": { "color": "success", "variant": "subtle", "icon": "i-lucide-bike" }, "bind": { "title": { "cat": ["Delivering to ", { "get": [{ "def": "deliveryZone" }, "label"] }] }, "description": { "cat": [{ "if": [{ "==": [{ "def": "deliveryFee" }, 0] }, "Free delivery", { "cat": [{ "format": [{ "def": "deliveryFee" }, "currency"] }, " delivery fee"] }] }, " · about ", { "get": [{ "def": "deliveryZone" }, "minutes"] }, " minutes."] } } }
+                                    ],
+                                    "else": [
+                                      { "type": "component", "as": "Alert", "if": { "!": { "isEmpty": [{ "state": "checkout.address.postalCode" }] } }, "props": { "color": "warning", "variant": "subtle", "icon": "i-lucide-map-pin-off", "title": "Outside our delivery area", "description": "Switch to pickup, or try a postal code closer to the kitchen." } }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "md", "width": "sm" },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "md" },
+                            "children": [
+                              { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Summary" },
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": { "label": "Promo code" },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "Stack",
+                                    "props": { "direction": "row", "gap": "xs" },
+                                    "children": [
+                                      { "type": "component", "as": "Input", "props": { "placeholder": "WELCOME10", "icon": "i-lucide-ticket-percent" }, "model": "ui.promoInput" },
+                                      { "type": "component", "as": "Button", "props": { "label": "Apply", "variant": "outline", "color": "neutral" }, "bind": { "disabled": { "isEmpty": [{ "state": "ui.promoInput" }] } }, "on": { "click": "apply-promo" } }
+                                    ]
+                                  }
+                                ]
+                              },
+                              { "type": "if", "condition": { "==": [{ "def": "promoStatus" }, "applied"] }, "children": [
+                                { "type": "component", "as": "Stack", "props": { "direction": "row", "align": "center", "justify": "between" }, "children": [
+                                  { "type": "component", "as": "Badge", "props": { "color": "success", "variant": "subtle", "icon": "i-lucide-check" }, "bind": { "label": { "get": [{ "def": "promo" }, "label"] } } },
+                                  { "type": "component", "as": "Button", "props": { "label": "Remove", "variant": "link", "color": "neutral", "size": "xs" }, "on": { "click": "remove-promo" } }
+                                ] }
+                              ] },
+                              { "type": "if", "condition": { "==": [{ "def": "promoStatus" }, "below-minimum"] }, "children": [
+                                { "type": "component", "as": "Text", "props": { "size": "sm", "color": "warning" }, "bind": { "content": { "cat": [{ "get": [{ "def": "promo" }, "label"] }, " applies from ", { "format": [{ "get": [{ "def": "promo" }, "minSubtotal"] }, "currency"] }] } } }
+                              ] },
+                              {
+                                "type": "component",
+                                "as": "Field",
+                                "props": { "label": "Tip the kitchen" },
+                                "children": [
+                                  {
+                                    "type": "component",
+                                    "as": "Stack",
+                                    "props": { "direction": "row", "gap": "xs", "wrap": true },
+                                    "children": [
+                                      {
+                                        "type": "for",
+                                        "in": { "resource": "tip-options" },
+                                        "as": "tip",
+                                        "children": [
+                                          {
+                                            "type": "component",
+                                            "as": "Button",
+                                            "props": { "size": "sm" },
+                                            "bind": {
+                                              "label": { "if": [{ "==": [{ "var": "tip" }, 0] }, "No tip", { "cat": [{ "var": "tip" }, "%"] }] },
+                                              "variant": { "if": [{ "==": [{ "state": "cart.tip" }, { "var": "tip" }] }, "solid", "outline"] },
+                                              "color": { "if": [{ "==": [{ "state": "cart.tip" }, { "var": "tip" }] }, "primary", "neutral"] }
+                                            },
+                                            "on": { "click": "set-tip" }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              { "type": "component", "as": "Separator" },
+                              { "type": "template", "name": "component:order-totals" },
+                              { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "bind": { "content": { "cat": ["Ready in about ", { "format": [{ "def": "estimatedMinutes" }, "minutes"] }, "."] } } },
+                              {
+                                "type": "for",
+                                "in": { "def": "checkoutBlockers" },
+                                "as": "reason",
+                                "children": [
+                                  { "type": "component", "as": "Alert", "props": { "color": "warning", "variant": "soft", "icon": "i-lucide-info" }, "bind": { "title": { "var": "reason" } } }
+                                ]
+                              },
+                              { "type": "component", "as": "Button", "props": { "size": "xl", "block": true, "trailingIcon": "i-lucide-arrow-right", "to": "/checkout" }, "bind": { "label": { "cat": ["Checkout · ", { "format": [{ "def": "total" }, "currency"] }] }, "disabled": { "!": { "def": "canCheckout" } } } }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:checkout": {
+        "route": "/checkout",
+        "title": "Checkout",
+        "enter": "guard-checkout",
+        "children": [
+          { "type": "component", "as": "Button", "props": { "label": "Back to cart", "icon": "i-lucide-arrow-left", "variant": "link", "color": "neutral", "to": "/cart" } },
+          { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "Almost done" },
+          {
+            "type": "component",
+            "as": "Stack",
+            "props": { "direction": "row", "responsive": true, "gap": "xl", "align": "start" },
+            "children": [
+              {
+                "type": "component",
+                "as": "Form",
+                "props": { "schema": "checkout", "state": "checkout", "validateOn": ["blur", "change", "input"] },
+                "on": { "submit": "place-order" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "gap": "lg", "grow": true },
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "md" },
+                            "children": [
+                              { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Your details" },
+                              { "type": "component", "as": "Field", "props": { "name": "customer.name", "label": "Name", "required": true }, "children": [
+                                { "type": "component", "as": "Input", "props": { "placeholder": "Sam Rivera", "icon": "i-lucide-user", "autocomplete": "name" }, "model": "checkout.customer.name" }
+                              ] },
+                              {
+                                "type": "component",
+                                "as": "Grid",
+                                "props": { "cols": 2, "gap": "md" },
+                                "children": [
+                                  { "type": "component", "as": "Field", "props": { "name": "customer.phone", "label": "Phone", "required": true }, "children": [
+                                    { "type": "component", "as": "Input", "props": { "placeholder": "+1 415 555 0100", "icon": "i-lucide-phone", "type": "tel", "autocomplete": "tel" }, "model": "checkout.customer.phone" }
+                                  ] },
+                                  { "type": "component", "as": "Field", "props": { "name": "customer.email", "label": "Email", "hint": "For the receipt" }, "children": [
+                                    { "type": "component", "as": "Input", "props": { "placeholder": "sam@example.com", "icon": "i-lucide-mail", "type": "email", "autocomplete": "email" }, "model": "checkout.customer.email" }
+                                  ] }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "if",
+                        "condition": { "def": "isDelivery" },
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Group",
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "gap": "md" },
+                                "children": [
+                                  { "type": "component", "as": "Stack", "props": { "direction": "row", "justify": "between", "align": "baseline" }, "children": [
+                                    { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Delivery address" },
+                                    { "type": "component", "as": "Badge", "props": { "variant": "subtle", "color": "success", "icon": "i-lucide-bike" }, "bind": { "label": { "get": [{ "def": "deliveryZone" }, "label"] } } }
+                                  ] },
+                                  {
+                                    "type": "component",
+                                    "as": "Grid",
+                                    "props": { "cols": 3, "gap": "md" },
+                                    "children": [
+                                      { "type": "component", "as": "Field", "props": { "name": "address.street", "label": "Street", "required": true }, "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "Oak Street" }, "model": "checkout.address.street" }] },
+                                      { "type": "component", "as": "Field", "props": { "name": "address.number", "label": "Number", "required": true }, "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "1188" }, "model": "checkout.address.number" }] },
+                                      { "type": "component", "as": "Field", "props": { "name": "address.complement", "label": "Apt / floor" }, "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "Apt 4B" }, "model": "checkout.address.complement" }] },
+                                      { "type": "component", "as": "Field", "props": { "name": "address.district", "label": "Neighborhood", "required": true }, "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "Hayes Valley" }, "model": "checkout.address.district" }] },
+                                      { "type": "component", "as": "Field", "props": { "name": "address.postalCode", "label": "Postal code", "required": true }, "children": [{ "type": "component", "as": "Input", "props": { "placeholder": "94110", "icon": "i-lucide-map-pin" }, "model": "checkout.address.postalCode" }] }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Group",
+                        "children": [
+                          {
+                            "type": "component",
+                            "as": "Stack",
+                            "props": { "gap": "md" },
+                            "children": [
+                              { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Payment" },
+                              { "type": "component", "as": "Field", "props": { "name": "payment.method" }, "children": [
+                                {
+                                  "type": "component",
+                                  "as": "RadioGroup",
+                                  "props": { "variant": "card", "color": "primary" },
+                                  "bind": { "items": { "map": [{ "resource": "payment-methods" }, { "obj": { "value": { "var": "method.id" }, "label": { "var": "method.label" }, "description": { "var": "method.description" } } }, "method"] } },
+                                  "model": "checkout.payment.method"
+                                }
+                              ] },
+                              { "type": "component", "as": "Field", "props": { "name": "notes", "label": "Notes for the kitchen", "hint": "Optional" }, "children": [
+                                { "type": "component", "as": "Textarea", "props": { "placeholder": "Ring the bell twice, leave at the door…", "rows": 2, "autoresize": true, "maxlength": 200 }, "model": "checkout.notes" }
+                              ] }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "component",
+                        "as": "Button",
+                        "props": { "type": "submit", "size": "xl", "block": true, "icon": "i-lucide-chef-hat" },
+                        "bind": { "label": { "cat": ["Place order · ", { "format": [{ "def": "total" }, "currency"] }] }, "loading": { "context": "busy" }, "disabled": { "!": { "def": "canCheckout" } } }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "width": "sm" },
+                "children": [
+                  {
+                    "type": "component",
+                    "as": "Group",
+                    "children": [
+                      {
+                        "type": "component",
+                        "as": "Stack",
+                        "props": { "gap": "md" },
+                        "children": [
+                          { "type": "component", "as": "Heading", "props": { "level": 3 }, "content": "Your order" },
+                          {
+                            "type": "for",
+                            "in": { "def": "cartLines" },
+                            "as": "line",
+                            "key": "id",
+                            "children": [
+                              {
+                                "type": "component",
+                                "as": "Stack",
+                                "props": { "direction": "row", "justify": "between", "gap": "md", "align": "start" },
+                                "children": [
+                                  { "type": "component", "as": "Stack", "props": { "gap": "none", "grow": true }, "children": [
+                                    { "type": "component", "as": "Text", "props": { "size": "sm" }, "bind": { "content": { "cat": [{ "var": "line.quantity" }, " × ", { "var": "line.name" }] } } },
+                                    { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "if": { "!": { "isEmpty": [{ "var": "line.modifierSummary" }] } }, "bind": { "content": { "var": "line.modifierSummary" } } }
+                                  ] },
+                                  { "type": "component", "as": "Text", "props": { "size": "sm", "tabular": true }, "bind": { "content": { "format": [{ "var": "line.total" }, "currency"] } } }
+                                ]
+                              }
+                            ]
+                          },
+                          { "type": "component", "as": "Separator" },
+                          { "type": "component", "as": "Stack", "props": { "direction": "row", "gap": "xs", "wrap": true }, "children": [
+                            { "type": "component", "as": "Badge", "props": { "variant": "subtle", "color": "neutral" }, "bind": { "label": { "get": [{ "findBy": [{ "resource": "fulfillment-options" }, "id", { "state": "cart.fulfillment" }] }, "label" ] }, "icon": { "get": [{ "findBy": [{ "resource": "fulfillment-options" }, "id", { "state": "cart.fulfillment" }] }, "icon" ] } } },
+                            { "type": "component", "as": "Badge", "props": { "variant": "subtle", "color": "neutral", "icon": "i-lucide-timer" }, "bind": { "label": { "cat": ["~", { "format": [{ "def": "estimatedMinutes" }, "minutes"] }] } } }
+                          ] },
+                          { "type": "template", "name": "component:order-totals" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+
+      "page:order-confirmed": {
+        "route": "/order/:id",
+        "title": "Order confirmed",
+        "children": [
+          {
+            "type": "if",
+            "condition": { "def": "lastOrderMatchesRoute" },
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "lg", "align": "center", "paddingY": "md" },
+                "children": [
+                  { "type": "component", "as": "Avatar", "props": { "icon": "i-lucide-check", "size": "3xl" } },
+                  { "type": "component", "as": "Heading", "props": { "level": 1, "align": "center" }, "bind": { "content": { "cat": ["Thanks, ", { "first": [{ "split": [{ "state": "lastOrder.data.customer.name" }, " "] }] }, "! Your order is in."] } } },
+                  { "type": "component", "as": "Text", "props": { "color": "muted", "align": "center" }, "bind": { "content": { "cat": ["Order ", { "state": "lastOrder.id" }, " · ", { "if": [{ "==": [{ "state": "lastOrder.data.fulfillment" }, "delivery"] }, "on its way in about ", "ready for pickup in about "] }, { "format": [{ "state": "lastOrder.data.estimatedMinutes" }, "minutes"] }, "."] } } },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "direction": "row", "gap": "xs", "wrap": true, "justify": "center" },
+                    "children": [
+                      { "type": "component", "as": "Badge", "props": { "variant": "subtle", "color": "neutral", "icon": "i-lucide-credit-card" }, "bind": { "label": { "get": [{ "findBy": [{ "resource": "payment-methods" }, "id", { "state": "lastOrder.data.payment.method" }] }, "label"] } } },
+                      { "type": "component", "as": "Badge", "props": { "variant": "subtle", "color": "neutral", "icon": "i-lucide-file-lock-2" }, "bind": { "label": { "cat": ["pinned to document ", { "substr": [{ "state": "lastOrder.createdUnder.version" }, 0, 8] }] } } }
+                    ]
+                  },
+                  {
+                    "type": "component",
+                    "as": "Stack",
+                    "props": { "width": "md", "gap": "md" },
+                    "children": [
+                      { "type": "template", "name": "channel:kitchen-ticket", "with": { "order": { "state": "lastOrder" } } },
+                      { "type": "component", "as": "Button", "props": { "label": "Order something else", "block": true, "variant": "outline", "color": "neutral", "to": "/", "icon": "i-lucide-utensils" } }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "else": [
+              {
+                "type": "component",
+                "as": "Empty",
+                "props": { "icon": "i-lucide-receipt", "title": "We could not find that order on this device", "description": "Orders are kept in your browser. If you placed it here, it may have been cleared." },
+                "slots": { "actions": [{ "type": "component", "as": "Button", "props": { "label": "Back to the menu", "to": "/" } }] }
+              }
+            ]
+          }
+        ]
+      },
+
+      "channel:kitchen-ticket": [
+        {
+          "type": "component",
+          "as": "Stack",
+          "props": { "gap": "xs", "surface": "muted", "padding": "md", "rounded": "lg", "border": true },
+          "children": [
+            { "type": "component", "as": "Text", "props": { "size": "xs", "weight": "bold", "align": "center", "tabular": true }, "bind": { "content": { "cat": ["EMBER & OAK · TICKET ", { "var": "order.id" }] } } },
+            { "type": "component", "as": "Text", "props": { "size": "xs", "align": "center", "color": "muted", "tabular": true }, "bind": { "content": { "cat": [{ "upper": [{ "var": "order.data.fulfillment" }] }, " · ", { "format": [{ "var": "order.createdAt" }, "datetime"] }] } } },
+            { "type": "component", "as": "Separator" },
+            {
+              "type": "for",
+              "in": { "var": "order.data.lines" },
+              "as": "line",
+              "key": "id",
+              "children": [
+                { "type": "component", "as": "Stack", "props": { "direction": "row", "justify": "between", "gap": "md" }, "children": [
+                  { "type": "component", "as": "Text", "props": { "size": "sm", "tabular": true }, "bind": { "content": { "cat": [{ "var": "line.quantity" }, "  ", { "upper": [{ "var": "line.name" }] }] } } },
+                  { "type": "component", "as": "Text", "props": { "size": "sm", "tabular": true }, "bind": { "content": { "format": [{ "var": "line.total" }, "currency"] } } }
+                ] },
+                { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "if": { "!": { "isEmpty": [{ "var": "line.modifierSummary" }] } }, "bind": { "content": { "cat": ["   ", { "var": "line.modifierSummary" }] } } },
+                { "type": "component", "as": "Text", "props": { "size": "xs", "color": "warning" }, "if": { "!": { "isEmpty": [{ "var": "line.notes" }] } }, "bind": { "content": { "cat": ["   ! ", { "upper": [{ "var": "line.notes" }] }] } } }
+              ]
+            },
+            { "type": "component", "as": "Separator" },
+            { "type": "component", "as": "Stack", "props": { "direction": "row", "justify": "between" }, "children": [
+              { "type": "component", "as": "Text", "props": { "size": "sm", "weight": "bold" }, "content": "TOTAL" },
+              { "type": "component", "as": "Text", "props": { "size": "sm", "weight": "bold", "tabular": true }, "bind": { "content": { "format": [{ "var": "order.data.totals.total" }, "currency"] } } }
+            ] },
+            { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "if": { "!": { "isEmpty": [{ "var": "order.data.notes" }] } }, "bind": { "content": { "cat": ["NOTES: ", { "var": "order.data.notes" }] } } },
+            { "type": "component", "as": "Text", "props": { "size": "xs", "color": "muted" }, "if": { "var": "order.data.address" }, "bind": { "content": { "cat": ["DELIVER TO: ", { "var": "order.data.address.street" }, " ", { "var": "order.data.address.number" }, { "if": [{ "isEmpty": [{ "var": "order.data.address.complement" }] }, "", { "cat": [", ", { "var": "order.data.address.complement" }] }] }, " · ", { "var": "order.data.address.district" }, " ", { "var": "order.data.address.postalCode" }] } } }
+          ]
+        }
+      ]
+    },
+
+    "tests": [
+      {
+        "name": "empty cart has zero totals and cannot check out",
+        "expect": { "cartCount": 0, "cartIsEmpty": true, "subtotal": 0, "tax": 0, "tipAmount": 0, "total": 0, "canCheckout": false, "meetsMinimum": false, "estimatedMinutes": 15, "checkoutBlockers": ["Your cart is empty."] }
+      },
+      {
+        "name": "pickup order: modifiers priced, tax and tip rounded half-up",
+        "state": {
+          "cart": {
+            "lines": [
+              { "id": 1, "productId": "margherita", "quantity": 2, "notes": "", "modifiers": [{ "group": "pizza-size", "label": "Size", "options": "Large · 16\"", "priceDelta": 600 }, { "group": "pizza-extras", "label": "Extras", "options": "", "priceDelta": 0 }] },
+              { "id": 2, "productId": "house-lemonade", "quantity": 1, "notes": "no ice", "modifiers": [{ "group": "drink-size", "label": "Size", "options": "12 oz", "priceDelta": 0 }] }
+            ],
+            "fulfillment": "pickup",
+            "tip": 10
+          }
+        },
+        "expect": {
+          "cartCount": 3,
+          "subtotal": 4850,
+          "discount": 0,
+          "deliveryFee": 0,
+          "tax": 412,
+          "tipAmount": 485,
+          "total": 5747,
+          "estimatedMinutes": 30,
+          "canCheckout": true,
+          "promoStatus": "none"
+        }
+      },
+      {
+        "name": "delivery to Downtown with WELCOME10: percent discount before tax, zone fee applied",
+        "state": {
+          "cart": {
+            "lines": [
+              { "id": 1, "productId": "margherita", "quantity": 2, "notes": "", "modifiers": [{ "group": "pizza-size", "label": "Size", "options": "Large · 16\"", "priceDelta": 600 }] },
+              { "id": 2, "productId": "house-lemonade", "quantity": 1, "notes": "", "modifiers": [] }
+            ],
+            "fulfillment": "delivery",
+            "promoCode": "welcome10",
+            "tip": 10
+          },
+          "checkout": { "address": { "postalCode": "94110" } }
+        },
+        "expect": {
+          "isDelivery": true,
+          "promoStatus": "applied",
+          "discount": 485,
+          "deliveryFee": 399,
+          "tax": 371,
+          "tipAmount": 485,
+          "total": 5620,
+          "estimatedMinutes": 40,
+          "canCheckout": true
+        }
+      },
+      {
+        "name": "FREESHIP waives the delivery fee only",
+        "state": {
+          "cart": {
+            "lines": [{ "id": 1, "productId": "margherita", "quantity": 2, "notes": "", "modifiers": [{ "group": "pizza-size", "label": "Size", "options": "Large · 16\"", "priceDelta": 600 }] }, { "id": 2, "productId": "house-lemonade", "quantity": 1, "notes": "", "modifiers": [] }],
+            "fulfillment": "delivery",
+            "promoCode": "FREESHIP",
+            "tip": 10
+          },
+          "checkout": { "address": { "postalCode": "94302" } }
+        },
+        "expect": { "discount": 0, "deliveryFee": 0, "tax": 412, "total": 5747, "estimatedMinutes": 45 }
+      },
+      {
+        "name": "large orders get free delivery without a code",
+        "state": {
+          "cart": { "lines": [{ "id": 1, "productId": "oak-smoked-brisket", "quantity": 3, "notes": "", "modifiers": [] }], "fulfillment": "delivery", "tip": 0 },
+          "checkout": { "address": { "postalCode": "94210" } }
+        },
+        "expect": { "subtotal": 8400, "deliveryFee": 0, "tipAmount": 0, "tax": 714, "total": 9114 }
+      },
+      {
+        "name": "unknown promo code is invalid and changes nothing",
+        "state": { "cart": { "lines": [{ "id": 1, "productId": "smoked-burrata", "quantity": 2, "notes": "", "modifiers": [] }], "promoCode": "NOPE", "tip": 0 } },
+        "expect": { "promo": null, "promoStatus": "invalid", "discount": 0, "total": 3038 }
+      },
+      {
+        "name": "OAK5 below its minimum subtotal is not applied",
+        "state": { "cart": { "lines": [{ "id": 1, "productId": "smoked-burrata", "quantity": 2, "notes": "", "modifiers": [] }], "promoCode": "OAK5", "tip": 0 } },
+        "expect": { "promoStatus": "below-minimum", "discount": 0 }
+      },
+      {
+        "name": "postal code outside the zones blocks delivery checkout",
+        "state": {
+          "cart": { "lines": [{ "id": 1, "productId": "ember-roasted-chicken", "quantity": 1, "notes": "", "modifiers": [{ "group": "side-choice", "label": "Choose a side", "options": "Sourdough focaccia", "priceDelta": 200 }] }], "fulfillment": "delivery", "tip": 15 },
+          "checkout": { "address": { "postalCode": "10001" } }
+        },
+        "expect": { "subtotal": 2600, "deliveryFee": 0, "canCheckout": false, "checkoutBlockers": ["Enter a postal code inside our delivery zones (941xx, 942xx, 943xx)."] }
+      },
+      {
+        "name": "below the minimum order the blocker says how much is missing",
+        "state": { "cart": { "lines": [{ "id": 1, "productId": "sparkling-water", "quantity": 1, "notes": "", "modifiers": [] }], "tip": 0 } },
+        "expect": { "subtotal": 350, "meetsMinimum": false, "amountToMinimum": 1150, "checkoutBlockers": ["Add $11.50 more to reach the minimum order."] }
+      },
+      {
+        "name": "product page draft prices the selected modifiers",
+        "context": { "params": { "id": "nduja-honey" } },
+        "state": { "ui": { "draft": { "productId": "nduja-honey", "quantity": 2, "notes": "", "selections": [{ "group": "pizza-size", "option": "large" }, { "group": "pizza-extras", "option": ["extra-mozzarella", "basil"] }] } } },
+        "expect": {
+          "draftModifierDelta": 850,
+          "draftUnitPrice": 2750,
+          "draftTotal": 5500,
+          "draftIsValid": true,
+          "draftModifierSnapshot": [
+            { "group": "pizza-size", "label": "Size", "options": "Large · 16\"", "priceDelta": 600 },
+            { "group": "pizza-extras", "label": "Extras", "options": "Extra mozzarella, Fresh basil", "priceDelta": 250 }
+          ]
+        }
+      },
+      {
+        "name": "a required group without a selection makes the draft invalid",
+        "context": { "params": { "id": "oak-smoked-brisket" } },
+        "state": { "ui": { "draft": { "productId": "oak-smoked-brisket", "quantity": 1, "notes": "", "selections": [{ "group": "spice-level", "option": null }, { "group": "side-choice", "option": "greens" }] } } },
+        "expect": { "draftIsValid": false, "draftUnitPrice": 2800 }
+      },
+      {
+        "name": "search and category filters combine",
+        "state": { "ui": { "category": "wood-fired", "search": "honey" } },
+        "expect": { "filteredProducts": [{ "id": "nduja-honey", "category": "wood-fired", "name": "'Nduja & honey", "description": "Spicy Calabrian 'nduja, mozzarella, hot honey, pickled shallot.", "price": 1900, "prepMinutes": 15, "tags": ["spicy", "popular"], "icon": "i-lucide-pizza", "tone": "error", "modifierGroups": ["pizza-size", "pizza-extras"] }] }
+      }
+    ]
   }
 }

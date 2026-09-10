@@ -1,0 +1,27 @@
+{
+  "name": "counter",
+  "content": {
+    "meta": { "title": "Counter", "currency": "USD", "locale": "en-US" },
+    "resources": { "settings": { "type": "constant", "data": { "step": 2 } } },
+    "schemas": {},
+    "state": { "count": 3 },
+    "definitions": {
+      "double": { "logic": { "*": [{ "state": "count" }, { "resource": ["settings", "step"] }] } }
+    },
+    "actions": {
+      "bump": { "type": "increment", "path": "count", "by": { "resource": ["settings", "step"] } }
+    },
+    "templates": {
+      "page:index": {
+        "route": "/",
+        "children": [
+          { "type": "component", "as": "Heading", "props": { "level": 1 }, "content": "Counter fixture" },
+          { "type": "component", "as": "Text", "bind": { "content": { "cat": ["Double: ", { "def": "double" }] } } },
+          { "type": "component", "as": "Button", "props": { "label": "Bump" }, "on": { "click": "bump" } }
+        ]
+      },
+      "page:about": { "route": "/about", "children": [{ "type": "text", "content": "About page" }] }
+    },
+    "tests": [{ "name": "double", "expect": { "double": 6 } }]
+  }
+}

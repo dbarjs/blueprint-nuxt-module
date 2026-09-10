@@ -1,6 +1,9 @@
 export default defineNuxtConfig({
-  modules: ['my-module'],
+  modules: ['blueprint-nuxt-module'],
   devtools: { enabled: true },
   compatibilityDate: 'latest',
-  myModule: {},
+  blueprint: {
+    // One JSON document per application, at the repository root.
+    dir: '../content',
+  },
 })

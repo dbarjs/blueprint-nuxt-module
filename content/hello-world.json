@@ -1,9 +1,68 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "../playground/.nuxt/blueprint/schema.json",
   "name": "hello-world",
   "content": {
-    "resources": {},
+    "meta": {
+      "title": "Hello, Blueprint",
+      "description": "The smallest possible application: one page, one definition, one action.",
+      "icon": "i-lucide-hand",
+      "currency": "USD",
+      "locale": "en-US",
+      "theme": { "primary": "emerald", "neutral": "zinc" }
+    },
+    "resources": {
+      "greetings": {
+        "type": "list",
+        "data": ["Hello", "Olá", "Bonjour", "Hallo", "Ciao"]
+      }
+    },
     "schemas": {},
-    "templates": {}
+    "state": { "index": 0, "name": "" },
+    "definitions": {
+      "greeting": {
+        "type": "string",
+        "logic": { "get": [{ "resource": "greetings" }, { "state": "index" }] }
+      },
+      "message": {
+        "type": "string",
+        "logic": { "cat": [{ "def": "greeting" }, ", ", { "if": [{ "isEmpty": [{ "state": "name" }] }, "stranger", { "state": "name" }] }, "!"] }
+      }
+    },
+    "actions": {
+      "next-greeting": {
+        "type": "set",
+        "path": "index",
+        "value": { "%": [{ "+": [{ "state": "index" }, 1] }, { "length": [{ "resource": "greetings" }] }] }
+      }
+    },
+    "templates": {
+      "page:index": {
+        "route": "/",
+        "title": "Hello",
+        "children": [
+          {
+            "type": "component",
+            "as": "Container",
+            "children": [
+              {
+                "type": "component",
+                "as": "Stack",
+                "props": { "gap": "lg", "paddingY": "xl", "align": "center" },
+                "children": [
+                  { "type": "component", "as": "Heading", "props": { "level": 1, "align": "center" }, "bind": { "content": { "def": "message" } } },
+                  { "type": "component", "as": "Input", "props": { "placeholder": "Your name", "size": "xl", "icon": "i-lucide-user" }, "model": "name" },
+                  { "type": "component", "as": "Button", "props": { "label": "Another language", "icon": "i-lucide-languages", "size": "lg" }, "on": { "click": "next-greeting" } },
+                  { "type": "component", "as": "Text", "props": { "size": "sm", "color": "muted", "align": "center" }, "content": "This page is content/hello-world.json — edit it and watch it update." }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "tests": [
+      { "name": "default greeting", "expect": { "greeting": "Hello", "message": "Hello, stranger!" } },
+      { "name": "greets by name in another language", "state": { "index": 1, "name": "Eduardo" }, "expect": { "message": "Olá, Eduardo!" } }
+    ]
   }
 }
